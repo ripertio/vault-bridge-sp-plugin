@@ -1,0 +1,38 @@
+{
+  "id": "sync-md-multi",
+  "manifestVersion": 1,
+  "name": "sync.md Multi",
+  "version": "0.4.6",
+  "description": "Sync multiple SuperProductivity projects with their own markdown files (bidirectional)",
+  "author": "Fernando Pindado",
+  "homepage": "https://codeberg.org/fpindado/sync-md-multi",
+  "repository": {
+    "type": "git",
+    "url": "https://codeberg.org/fpindado/sync-md-multi.git"
+  },
+  "minSupVersion": "10.0.0",
+  "permissions": [
+    "getTasks",
+    "updateTask",
+    "addTask",
+    "deleteTask",
+    "getAllProjects",
+    "addProject",
+    "nodeExecution",
+    "persistDataSynced",
+    "loadSyncedData",
+    "reorderTasks",
+    "registerHook",
+    "showSnack",
+    "batchUpdateForProject"
+  ],
+  "nodeScriptConfig": {
+    "timeout": 30000,
+    "memoryLimit": "256MB"
+  },
+  "supportsIndexHtml": true,
+  "iFrame": true,
+  "isSkipMenuEntry": false,
+  "hooks": ["anyTaskUpdate", "taskUpdate", "projectListUpdate", "action"],
+  "icon": "icon.svg"
+}

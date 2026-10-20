@@ -1,1 +1,14 @@
+coverage/
+dist/
+node_modules/
+*.zip
+*.bak
+.build/
+tsconfig.build.json
 .DS_Store
+
+# Historical development documentation — kept locally for reference, not published
+History Documentation/
+
+# Local working notes (e.g. the plugin's own pending-work list bound to SP) — never published
+Project Notes/

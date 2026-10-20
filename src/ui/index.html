@@ -1,0 +1,871 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>sync.md Multi Configuration</title>
+    <style>
+      body { padding: var(--s3); background: transparent; font-family: sans-serif; color: var(--text-color, #eee); }
+      .container { max-width: 800px; margin: 0 auto; }
+      h1 { margin-top: 0; }
+      .subtitle { color: var(--text-color-muted, #aaa); margin-bottom: var(--s3); }
+      .card { background: var(--bg-color-card, rgba(255,255,255,0.05)); border-radius: var(--card-border-radius, 8px); padding: var(--s2, 16px); margin-bottom: var(--s2, 16px); border: 1px solid var(--divider-color, #444); }
+      .binding-item { display: flex; justify-content: space-between; align-items: center; padding: var(--s, 8px) 0; border-bottom: 1px solid var(--divider-color, #444); }
+      .binding-item:last-child { border-bottom: none; }
+      .binding-info { flex-grow: 1; }
+      .binding-name { font-weight: bold; display: block; font-size: 1.1em; }
+      .binding-path { font-size: 0.85em; color: var(--text-color-muted, #aaa); }
+      .binding-synced { font-size: 0.78em; color: var(--text-color-muted, #aaa); display: block; margin-top: 2px; opacity: 0.85; }
+      .actions { display: flex; gap: var(--s, 8px); }
+      .form-group { margin-bottom: var(--s2, 16px); }
+      label { display: block; font-weight: 500; margin-bottom: var(--s-half, 4px); color: var(--text-color-muted, #aaa); }
+      input, select { width: 100%; padding: var(--s-half, 8px); border-radius: 4px; border: 1px solid var(--divider-color, #444); background: var(--bg-color-input, rgba(0,0,0,0.2)); color: inherit; box-sizing: border-box; }
+      /* Fixed blue accent so buttons don't change with the active SP project theme.
+         !important is needed because SP injects button theming into the plugin
+         iframe that would otherwise win over these rules for the default state. */
+      .btn { padding: var(--s-half, 8px) var(--s, 12px); border-radius: 4px; cursor: pointer; border: none; font-size: 0.9em; font-weight: 500; }
+      .btn-primary { background: #007bff !important; color: #fff !important; border: 1px solid #007bff !important; }
+      .btn-primary:hover { background: #0056b3 !important; border-color: #0056b3 !important; }
+      .btn-danger { background: #dc3545 !important; color: #fff !important; border: 1px solid #dc3545 !important; }
+      .btn-danger:hover { background: #c82333 !important; border-color: #c82333 !important; }
+      .btn-outline { background: transparent !important; border: 1px solid #007bff !important; color: #007bff !important; }
+      .btn-outline:hover { background: rgba(0, 123, 255, 0.22) !important; }
+      .status { padding: var(--s, 8px); border-radius: 4px; margin-top: var(--s2, 16px); display: none; }
+      .status.show { display: block; }
+      .status.success { background: rgba(40, 167, 69, 0.2); color: #28a745; border: 1px solid #28a745; }
+      .status.error { background: rgba(220, 53, 69, 0.2); color: #dc3545; border: 1px solid #dc3545; }
+      .empty-state { text-align: center; padding: var(--s3, 24px); color: var(--text-color-muted, #aaa); font-style: italic; }
+
+      /* ── Edit-mode flash: draws the eye to the form when Edit is clicked ── */
+      @keyframes editFlash {
+        0%   { box-shadow: 0 0 0 2px var(--c-primary, #007bff); background: rgba(0, 123, 255, 0.14); }
+        100% { box-shadow: 0 0 0 0 transparent; background: var(--bg-color-card, rgba(255,255,255,0.05)); }
+      }
+      .card.flash-edit { animation: editFlash 1.1s ease-out; }
+
+      /* ── File path input row ───────────────────────────────────────────── */
+      .file-input-row { display: flex; gap: 6px; align-items: stretch; }
+      .file-input-row input { flex: 1; min-width: 0; }
+      .file-drop-active { border-color: var(--c-primary, #007bff) !important; background: rgba(0,123,255,0.08) !important; }
+      .file-hint { font-size: 0.78em; color: var(--text-color-muted, #aaa); margin-top: 4px; display: block; }
+
+      /* ── Footer (version + repo link) ──────────────────────────────────── */
+      .app-footer { margin-top: var(--s3, 24px); padding-top: var(--s, 12px); border-top: 1px solid var(--divider-color, #444); text-align: center; font-size: 0.8em; color: var(--text-color-muted, #aaa); }
+      .app-footer a { color: inherit; text-decoration: underline; }
+      .app-footer a#updateLink { color: #3b82f6; font-weight: 600; text-decoration: none; }
+
+      /* ── Inline file browser ───────────────────────────────────────────── */
+      .fb-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 1000; align-items: center; justify-content: center; }
+      .fb-overlay.open { display: flex; }
+      .fb-panel { background: #1e1e1e; color: #e8e8e8; border: 1px solid #555; border-radius: 8px; width: 560px; max-width: 96vw; max-height: 80vh; display: flex; flex-direction: column; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+      .fb-header { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid #444; flex-shrink: 0; background: #252525; border-radius: 8px 8px 0 0; }
+      .fb-header .btn { color: #e8e8e8 !important; border-color: #555 !important; background: #333 !important; }
+      .fb-header .btn:hover { background: #444 !important; }
+      .fb-path { flex: 1; font-size: 0.82em; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; direction: rtl; text-align: left; }
+      .fb-list { overflow-y: auto; flex: 1; padding: 4px 0; background: #1e1e1e; border-radius: 0 0 8px 8px; }
+      .fb-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px; cursor: pointer; font-size: 0.92em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #e8e8e8; }
+      .fb-item:hover { background: rgba(255,255,255,0.08); }
+      .fb-item.fb-dir { color: #e8e8e8; }
+      .fb-item.fb-file { color: #7ab8f5; }
+      .fb-icon { width: 16px; text-align: center; flex-shrink: 0; }
+      .fb-empty { padding: 24px; text-align: center; color: #888; font-style: italic; }
+      .fb-error { padding: 12px 14px; color: #f87171; font-size: 0.88em; }
+      .fb-loading { padding: 24px; text-align: center; color: #888; }
+
+      /* ── Confirm modal (3-option delete) ───────────────────────────────── */
+      .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1100; align-items: center; justify-content: center; }
+      .modal-overlay.open { display: flex; }
+      .modal-panel { background: #1e1e1e; color: #e8e8e8; border: 1px solid #555; border-radius: 8px; width: 460px; max-width: 92vw; padding: 18px 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
+      .modal-panel h3 { margin: 0 0 8px; }
+      .modal-panel p { margin: 0 0 16px; font-size: 0.9em; color: #bbb; }
+      .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+      .btn-danger-outline { background: transparent !important; border: 1px solid #dc3545 !important; color: #dc3545 !important; }
+      .btn-danger-outline:hover { background: rgba(220, 53, 69, 0.15) !important; }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>sync.md Multi</h1>
+      <p class="subtitle">Manage multiple project-to-markdown sync bindings</p>
+
+      <div class="card">
+        <h3>Active Bindings</h3>
+        <div id="bindingsList">
+          <div class="empty-state">No bindings configured yet.</div>
+        </div>
+      </div>
+
+      <div class="card" id="formCard">
+        <h3 id="formTitle">Add New Binding</h3>
+        <form id="bindingForm">
+          <input type="hidden" id="bindingId" />
+          <div class="form-group">
+            <label for="projectId">Super Productivity Project</label>
+            <div style="display:flex;gap:6px;align-items:center;">
+              <select id="projectId" required style="flex:1;">
+                <option value="">Loading projects...</option>
+              </select>
+              <button type="button" class="btn btn-outline" id="refreshProjectsBtn" title="Refresh project list" style="flex-shrink:0;padding:6px 10px;">↺</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="filePath">Markdown File Path</label>
+            <div class="file-input-row">
+              <input type="text" id="filePath" placeholder="/path/to/your/tasks.md" required />
+              <button type="button" class="btn btn-outline" id="browseBtn">Browse…</button>
+            </div>
+            <span class="file-hint">Use Browse… to navigate the filesystem, or type the absolute path directly</span>
+          </div>
+          <div class="actions">
+            <button type="submit" class="btn btn-primary" id="saveBtn">Add Binding</button>
+            <button type="button" class="btn btn-outline" id="cancelBtn" style="display:none">Cancel</button>
+          </div>
+        </form>
+      </div>
+
+      <div id="status" class="status"></div>
+
+      <footer class="app-footer">
+        sync.md Multi <span id="pluginVersion">v__PLUGIN_VERSION__</span>
+        <a id="updateLink" href="#" target="_blank" rel="noopener noreferrer" style="display:none">&middot; ⬆ Update available</a>
+        &middot;
+        <a href="https://codeberg.org/fpindado/sync-md-multi" target="_blank" rel="noopener noreferrer">Git repository</a>
+      </footer>
+    </div>
+
+    <!-- ── Inline file browser overlay ─────────────────────────────────── -->
+    <div class="fb-overlay" id="fbOverlay">
+      <div class="fb-panel">
+        <div class="fb-header">
+          <button class="btn btn-outline" id="fbUpBtn" style="padding:4px 10px;font-size:0.85em;">↑ Up</button>
+          <span class="fb-path" id="fbPath">/</span>
+          <button class="btn btn-outline" id="fbCloseBtn" style="padding:4px 10px;font-size:0.85em;">✕</button>
+        </div>
+        <div class="fb-list" id="fbList">
+          <div class="fb-loading">Loading…</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Delete-binding confirm modal (3 options) ─────────────────────── -->
+    <div class="modal-overlay" id="confirmOverlay">
+      <div class="modal-panel">
+        <h3>Delete this binding?</h3>
+        <p>Removing the binding stops syncing this file. The Markdown keeps its hidden sync markers (<code>&lt;!--…--&gt;</code>) unless you clean it.</p>
+        <div class="modal-actions">
+          <button class="btn btn-outline" id="confirmCancelBtn">Cancel</button>
+          <button class="btn btn-danger-outline" id="confirmCleanBtn">Delete + clean file</button>
+          <button class="btn btn-danger" id="confirmDeleteBtn">Delete binding</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let config = { version: 2, bindings: [] };
+      let projects = [];
+      let projectsLoadAttempts = 0;
+
+      /**
+       * Message bridge to the background script (v0.4.0).
+       * The config now lives in the BACKGROUND's device-local localStorage (not the
+       * cross-device synced store), which this sandboxed iframe cannot read/write
+       * directly. All config reads/writes go through the background via
+       * postMessage → PluginAPI.onMessage; the background replies through SP's
+       * message channel. The response envelope arrives on `event.data.result`
+       * (confirmed empirically on the user's SP — NOT `.response`).
+       * Resolves to the background's response object, or null on timeout.
+       */
+      function sendMessage(message) {
+        return new Promise((resolve) => {
+          const messageId = 'smm-' + Date.now() + '-' + Math.random().toString(36).slice(2);
+          let settled = false;
+          const finish = (val) => {
+            if (settled) return;
+            settled = true;
+            window.removeEventListener('message', onMsg);
+            resolve(val);
+          };
+          const onMsg = (event) => {
+            const d = event.data;
+            if (d && d.type === 'PLUGIN_MESSAGE_RESPONSE' && d.messageId === messageId) {
+              finish(d.result != null ? d.result : d);
+            }
+          };
+          window.addEventListener('message', onMsg);
+          window.parent.postMessage({ type: 'PLUGIN_MESSAGE', message, messageId }, '*');
+          // Safety net: never hang the UI if the background doesn't reply.
+          setTimeout(() => finish(null), 5000);
+        });
+      }
+
+      function showStatus(msg, type) {
+        const s = document.getElementById('status');
+        s.textContent = msg;
+        s.className = `status ${type} show`;
+        setTimeout(() => s.classList.remove('show'), 5000);
+      }
+
+      /**
+       * Populate the project dropdown.
+       * Strategy (mirrors the original sync.md approach):
+       *   1. Try PluginAPI.getAllProjects() directly from the iframe — this works in
+       *      most SP versions and always returns the current list.
+       *   2. If the result looks incomplete (only 1 entry = Inbox), fall back to the
+       *      _cachedProjects list that the background script keeps fresh.
+       *   3. Retry automatically after 2 s (in case SP hadn't finished loading the
+       *      project state into the iframe context yet).
+       */
+      async function loadProjects() {
+        const sel = document.getElementById('projectId');
+        const currentVal = sel.value; // preserve any in-progress selection
+        try {
+          let freshProjects = null;
+
+          if (PluginAPI.getAllProjects) {
+            const raw = await PluginAPI.getAllProjects();
+            // SP may return only Inbox when the iframe hasn't fully initialised yet.
+            // Treat a single-entry result as "not ready" and fall back to the cache.
+            if (raw && raw.length > 1) {
+              freshProjects = raw.map(p => ({ id: p.id, title: p.title }));
+            }
+          }
+
+          // Fall back to background-maintained cache
+          if (!freshProjects || freshProjects.length === 0) {
+            freshProjects = projects; // already seeded from the background's cache
+          }
+
+          if (!freshProjects || freshProjects.length === 0) {
+            sel.innerHTML = '<option value="">No projects found — try the ↺ button in a moment</option>';
+            // Retry once after 2 s (same as original sync.md)
+            if (projectsLoadAttempts < 3) {
+              projectsLoadAttempts++;
+              setTimeout(loadProjects, 2000);
+            }
+            return;
+          }
+
+          projects = freshProjects;
+          projectsLoadAttempts = 0;
+
+          // Filter out projects that already have a binding, except for the project
+          // belonging to the binding currently being edited (if any).
+          const currentEditingId = document.getElementById('bindingId').value;
+          const boundProjectIds = new Set(
+            config.bindings
+              .filter(b => b.id !== currentEditingId)
+              .map(b => b.projectId)
+          );
+          const availableProjects = projects.filter(p => !boundProjectIds.has(p.id));
+
+          sel.innerHTML = '<option value="">Select a project...</option>';
+          availableProjects.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.title;
+            sel.appendChild(opt);
+          });
+          if (currentVal) sel.value = currentVal; // restore selection if possible
+        } catch (e) {
+          console.error('[sync-md] loadProjects error:', e);
+          // Retry after 2 s
+          if (projectsLoadAttempts < 3) {
+            projectsLoadAttempts++;
+            setTimeout(loadProjects, 2000);
+          }
+        }
+      }
+
+      async function loadData() {
+        try {
+          // Read the config from the background via the message bridge (device-local
+          // localStorage lives in the background; the iframe has no access to it).
+          const res = await sendMessage({ type: 'getConfig' });
+          const data = res && res.success ? res.config : null;
+          if (data) {
+            config = {
+              version: data.version || 2,
+              bindings: data.bindings || [],
+              _lastSynced: data._lastSynced || {},
+              _latestVersion: data._latestVersion,
+              _latestUrl: data._latestUrl,
+            };
+            // Seed the projects array from cache so loadProjects() has something to
+            // fall back to if getAllProjects() returns only Inbox.
+            projects = data._cachedProjects || [];
+          }
+
+          // Load the project dropdown (with direct API call + cache fallback + retry)
+          projectsLoadAttempts = 0;
+          await loadProjects();
+
+          renderBindings();
+          renderUpdateIndicator();
+        } catch (e) {
+          console.error('[sync-md] loadData error:', e);
+          showStatus('Error loading data: ' + (e.message || e), 'error');
+        }
+      }
+
+      /** Human-friendly "last synced" label from an ISO timestamp (or Never). */
+      function formatLastSynced(iso) {
+        if (!iso) return 'Never synced';
+        const then = new Date(iso).getTime();
+        if (isNaN(then)) return 'Never synced';
+        const min = Math.floor((Date.now() - then) / 60000);
+        if (min < 1) return 'Last synced: just now';
+        if (min < 60) return `Last synced: ${min} min ago`;
+        const hr = Math.floor(min / 60);
+        if (hr < 24) return `Last synced: ${hr} h ago`;
+        return 'Last synced: ' + new Date(iso).toLocaleString();
+      }
+
+      /** True when version string `latest` is strictly newer than `current`. */
+      function isNewerVersion(latest, current) {
+        const parse = (v) => String(v).replace(/^v/i, '').trim().split('.').map(n => {
+          const x = parseInt(n, 10);
+          return Number.isFinite(x) ? x : 0;
+        });
+        const a = parse(latest), b = parse(current);
+        const len = Math.max(a.length, b.length);
+        for (let i = 0; i < len; i++) {
+          const x = a[i] || 0, y = b[i] || 0;
+          if (x > y) return true;
+          if (x < y) return false;
+        }
+        return false;
+      }
+
+      /**
+       * Show the footer "Update available" marker when the background's last
+       * check recorded a strictly-newer release. The current version comes from
+       * the build-time-injected placeholder; the latest from persisted config.
+       */
+      function renderUpdateIndicator() {
+        const link = document.getElementById('updateLink');
+        if (!link) return;
+        const current = String(document.getElementById('pluginVersion').textContent || '');
+        const latest = config._latestVersion;
+        if (latest && config._latestUrl && isNewerVersion(latest, current)) {
+          link.textContent = `· ⬆ Update available (v${latest})`;
+          link.href = config._latestUrl;
+          link.style.display = '';
+        } else {
+          link.style.display = 'none';
+        }
+      }
+
+      function renderBindings() {
+        const list = document.getElementById('bindingsList');
+        if (!config.bindings || config.bindings.length === 0) {
+          list.innerHTML = '<div class="empty-state">No bindings configured yet.</div>';
+          return;
+        }
+        list.innerHTML = '';
+        const lastSynced = config._lastSynced || {};
+        config.bindings.forEach(b => {
+          const p = projects.find(proj => proj.id === b.projectId);
+          const div = document.createElement('div');
+          div.className = 'binding-item';
+
+          // Build the row with DOM APIs and textContent — never innerHTML with
+          // dynamic values (project titles, paths and binding IDs are
+          // user-controlled and would otherwise allow script injection into
+          // this nodeExecution-capable iframe).
+          const info = document.createElement('div');
+          info.className = 'binding-info';
+
+          const name = document.createElement('span');
+          name.className = 'binding-name';
+          name.textContent = p ? p.title : b.projectId;
+
+          const path = document.createElement('span');
+          path.className = 'binding-path';
+          path.textContent = b.filePath;
+
+          const synced = document.createElement('span');
+          synced.className = 'binding-synced';
+          synced.textContent = formatLastSynced(lastSynced[b.id]);
+
+          info.append(name, path, synced);
+
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+
+          const editBtn = document.createElement('button');
+          editBtn.className = 'btn btn-outline';
+          editBtn.textContent = 'Edit';
+          editBtn.addEventListener('click', () => editBinding(b.id));
+
+          const delBtn = document.createElement('button');
+          delBtn.className = 'btn btn-danger';
+          delBtn.textContent = 'Delete';
+          delBtn.addEventListener('click', () => deleteBinding(b.id));
+
+          actions.append(editBtn, delBtn);
+          div.append(info, actions);
+          list.appendChild(div);
+        });
+      }
+
+      // Lexical fallback canonicalizer — mirror of canonicalizePathKey in
+      // src/background/helper/path-utils.ts. Used when a Node call is not
+      // reachable so the duplicate check still collapses `.`/`..`/`//`.
+      function canonicalizePathKey(input) {
+        if (!input) return input;
+        const winDrive = /^[a-zA-Z]:/.exec(input);
+        const unified = input.replace(/\\/g, '/');
+        const isAbsolute = unified.startsWith('/') || winDrive !== null;
+        const root = winDrive ? winDrive[0].toUpperCase() + '/' : isAbsolute ? '/' : '';
+        const rest = winDrive ? unified.slice(winDrive[0].length) : unified;
+        const out = [];
+        for (const seg of rest.split('/')) {
+          if (seg === '' || seg === '.') continue;
+          if (seg === '..') {
+            if (out.length > 0 && out[out.length - 1] !== '..') out.pop();
+            else if (!isAbsolute) out.push('..');
+            continue;
+          }
+          out.push(seg);
+        }
+        return (root + out.join('/')) || (isAbsolute ? root : '.');
+      }
+
+      // Canonicalize paths for duplicate detection. Prefer a Node-side
+      // path.resolve + fs.realpath (symlink- and case-aware) so two bindings
+      // can't target one physical file via different paths (#9323 review,
+      // point 3); fall back to the lexical key if Node is unavailable.
+      async function canonicalizePaths(paths) {
+        if (PluginAPI.executeNodeScript) {
+          try {
+            const r = await PluginAPI.executeNodeScript({
+              script: `
+                const fs = require('fs');
+                const path = require('path');
+                return {
+                  success: true,
+                  canonical: args[0].map((p) => {
+                    const resolved = path.resolve(p);
+                    try { return fs.realpathSync(resolved); }
+                    catch (e) { return resolved; }
+                  }),
+                };
+              `,
+              args: [paths],
+              timeout: 5000,
+            });
+            const res = r && r.result;
+            if (r && r.success && res && res.success && Array.isArray(res.canonical)) {
+              return res.canonical;
+            }
+          } catch (e) {
+            /* fall through to the lexical key */
+          }
+        }
+        return paths.map(canonicalizePathKey);
+      }
+
+      document.getElementById('bindingForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const id = document.getElementById('bindingId').value || 'b-' + Date.now();
+        const projectId = document.getElementById('projectId').value;
+        const filePath = document.getElementById('filePath').value.trim();
+
+        // Reject a file already bound elsewhere — comparing CANONICAL paths, so
+        // `/tmp/tasks.md` and `/tmp/./tasks.md` (or a symlink) are caught too.
+        const others = config.bindings.filter(b => b.id !== id);
+        const canon = await canonicalizePaths([filePath, ...others.map(b => b.filePath)]);
+        const collisionIdx = canon.slice(1).indexOf(canon[0]);
+        if (collisionIdx > -1) {
+          showStatus('This file is already used by another binding (it resolves to the same file, possibly via a different path or a symlink). Each binding must have a unique file.', 'error');
+          return;
+        }
+
+        const newBinding = { id, projectId, filePath, enabled: true };
+        const idx = config.bindings.findIndex(b => b.id === id);
+
+        if (idx > -1) config.bindings[idx] = newBinding;
+        else config.bindings.push(newBinding);
+
+        try {
+          // Persist via the background (single writer of device-local config).
+          // Send only version + bindings; the background owns _cachedProjects /
+          // _lastSynced / update-notifier state and merges them in.
+          const res = await sendMessage({
+            type: 'saveConfig',
+            config: { version: config.version || 2, bindings: config.bindings },
+          });
+          if (!res || !res.success) throw new Error((res && res.error) || 'no response from background');
+          showStatus('Configuration saved', 'success');
+          await resetForm();
+          renderBindings();
+        } catch (err) {
+          showStatus('Error saving: ' + (err.message || err), 'error');
+        }
+      };
+
+      window.editBinding = async function(id) {
+        const b = config.bindings.find(b => b.id === id);
+        if (b) {
+          // Set the editing id BEFORE rebuilding the dropdown so loadProjects()
+          // knows to include this binding's project in the available list.
+          document.getElementById('bindingId').value = b.id;
+          await loadProjects();
+          document.getElementById('projectId').value = b.projectId;
+          document.getElementById('filePath').value = b.filePath;
+          document.getElementById('formTitle').textContent = 'Edit Binding';
+          document.getElementById('saveBtn').textContent = 'Update Binding';
+          document.getElementById('cancelBtn').style.display = 'inline-block';
+          // Draw the eye to the form: smooth-scroll it into view and flash it,
+          // so it's obvious the edit happens down here (not in the list above).
+          const formCard = document.getElementById('formCard');
+          formCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          formCard.classList.remove('flash-edit');
+          void formCard.offsetWidth; // reflow so the animation restarts each time
+          formCard.classList.add('flash-edit');
+        }
+      };
+
+      async function resetForm() {
+        document.getElementById('bindingId').value = '';
+        document.getElementById('bindingForm').reset();
+        document.getElementById('formTitle').textContent = 'Add New Binding';
+        document.getElementById('saveBtn').textContent = 'Add Binding';
+        document.getElementById('cancelBtn').style.display = 'none';
+        // Rebuild dropdown for "Add" mode: the project we were editing is no
+        // longer exempt, so it should disappear from the available list again.
+        await loadProjects();
+      }
+
+      document.getElementById('cancelBtn').onclick = resetForm;
+
+      // ── Delete binding: 3-option confirm modal ──────────────────────────
+      let pendingDeleteId = null;
+
+      window.deleteBinding = function(id) {
+        pendingDeleteId = id;
+        // Prefer SP's native dialog (matches the deleted-project dialogs, theme-aware).
+        // Fall back to the custom in-panel modal if openDialog isn't exposed here.
+        if (typeof PluginAPI.openDialog === 'function') {
+          PluginAPI.openDialog({
+            htmlContent:
+              '<h3>Delete this binding?</h3>' +
+              '<p>Removing the binding stops syncing this file. The Markdown keeps its ' +
+              'hidden sync markers (<code>&lt;!--…--&gt;</code>) unless you clean it.</p>',
+            buttons: [
+              { label: 'Delete binding', color: 'warn', onClick: () => performDelete(false) },
+              { label: 'Delete + clean file', color: 'warn', onClick: () => performDelete(true) },
+              { label: 'Cancel', onClick: () => { pendingDeleteId = null; } },
+            ],
+          });
+        } else {
+          document.getElementById('confirmOverlay').classList.add('open');
+        }
+      };
+
+      function closeConfirm() {
+        document.getElementById('confirmOverlay').classList.remove('open');
+        pendingDeleteId = null;
+      }
+
+      /**
+       * Strip the <!--taskId--> markers from a .md file so it's left neutral.
+       * Returns: null if the file doesn't exist, true if it changed, false if
+       * it was already clean. The strip mirrors sync-manager's stripTaskIds.
+       */
+      async function sanitizeMdFile(filePath) {
+        const content = await readFileRaw(filePath);
+        if (content === null) return null;
+        const cleaned = content.replace(/^(\s*- \[[ x]\]\s*)<!--[^>]*-->\s*/gm, '$1');
+        if (cleaned === content) return false;
+        await writeFileRaw(filePath, cleaned);
+        return true;
+      }
+
+      async function readFileRaw(filePath) {
+        const r = await PluginAPI.executeNodeScript({
+          script: `
+            const fs = require('fs');
+            const path = require('path');
+            try {
+              const content = fs.readFileSync(path.resolve(args[0]), 'utf8');
+              return { success: true, content };
+            } catch (e) {
+              if (e.code === 'ENOENT') return { success: true, content: null };
+              return { success: false, error: e.message };
+            }
+          `,
+          args: [filePath],
+          timeout: 5000,
+        });
+        const res = r && r.result;
+        if (!res || !res.success) throw new Error((res && res.error) || 'read failed');
+        return res.content ?? null;
+      }
+
+      async function writeFileRaw(filePath, content) {
+        const r = await PluginAPI.executeNodeScript({
+          script: `
+            const fs = require('fs');
+            const path = require('path');
+            try {
+              fs.writeFileSync(path.resolve(args[0]), args[1], 'utf8');
+              return { success: true };
+            } catch (e) {
+              return { success: false, error: e.message };
+            }
+          `,
+          args: [filePath, content],
+          timeout: 5000,
+        });
+        const res = r && r.result;
+        if (!res || !res.success) throw new Error((res && res.error) || 'write failed');
+      }
+
+      async function performDelete(clean) {
+        const id = pendingDeleteId;
+        closeConfirm();
+        if (!id) return;
+        const binding = config.bindings.find(b => b.id === id);
+
+        // Optionally clean the .md first (while we still have the file path).
+        let cleanNote = '';
+        if (clean && binding) {
+          try {
+            const changed = await sanitizeMdFile(binding.filePath);
+            cleanNote = changed === null ? ' (file not found)'
+              : changed ? ' + file cleaned'
+              : ' (file already clean)';
+          } catch (e) {
+            console.error('[sync-md] sanitize failed:', e);
+            cleanNote = " (couldn't clean file)";
+          }
+        }
+
+        config.bindings = config.bindings.filter(b => b.id !== id);
+        try {
+          const res = await sendMessage({
+            type: 'saveConfig',
+            config: { version: config.version || 2, bindings: config.bindings },
+          });
+          if (!res || !res.success) throw new Error((res && res.error) || 'no response from background');
+          showStatus('Binding deleted' + cleanNote, 'success');
+          renderBindings();
+          // Freed project should reappear in the dropdown immediately.
+          await loadProjects();
+        } catch (err) {
+          showStatus('Error deleting: ' + (err.message || err), 'error');
+        }
+      }
+
+      document.getElementById('confirmDeleteBtn').onclick = () => performDelete(false);
+      document.getElementById('confirmCleanBtn').onclick = () => performDelete(true);
+      document.getElementById('confirmCancelBtn').onclick = closeConfirm;
+
+      // ── Inline file browser ─────────────────────────────────────────────────
+      let fbCurrentDir = '';
+
+      // Render a file-browser error via textContent (error strings can carry
+      // filesystem paths / messages — never route them through innerHTML).
+      function fbShowError(list, message) {
+        list.textContent = '';
+        const err = document.createElement('div');
+        err.className = 'fb-error';
+        err.textContent = message;
+        list.appendChild(err);
+      }
+
+      async function fbLoadDir(dirPath) {
+        const list = document.getElementById('fbList');
+        const pathLabel = document.getElementById('fbPath');
+        list.innerHTML = '<div class="fb-loading">Loading…</div>';
+
+        let result;
+        try {
+          const r = await PluginAPI.executeNodeScript({
+            script: `
+              const fs = require('fs');
+              const path = require('path');
+              const os = require('os');
+              try {
+                const dir = args[0] || os.homedir();
+                const entries = fs.readdirSync(dir, { withFileTypes: true });
+                const items = [];
+                for (const e of entries) {
+                  if (e.name.startsWith('.')) continue; // skip hidden
+                  const full = path.join(dir, e.name);
+                  const isDir = e.isDirectory();
+                  const isMd = !isDir && /\\.md$/i.test(e.name);
+                  if (isDir || isMd) {
+                    items.push({ name: e.name, isDir, path: full });
+                  }
+                }
+                items.sort((a, b) => {
+                  if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+                  return a.name.localeCompare(b.name);
+                });
+                const parent = path.dirname(dir);
+                return {
+                  success: true,
+                  items,
+                  currentPath: dir,
+                  parentPath: parent !== dir ? parent : null,
+                  homePath: os.homedir(),
+                };
+              } catch(e) {
+                return { success: false, error: e.message };
+              }
+            `,
+            args: [dirPath || ''],
+            timeout: 5000,
+          });
+          result = r && r.result;
+        } catch(e) {
+          fbShowError(list, 'Error: ' + (e.message || e));
+          return;
+        }
+
+        if (!result || !result.success) {
+          fbShowError(list, 'Could not read directory: ' + (result ? result.error : 'unknown error'));
+          return;
+        }
+
+        fbCurrentDir = result.currentPath;
+        pathLabel.textContent = result.currentPath;
+        document.getElementById('fbUpBtn').disabled = !result.parentPath;
+
+        list.innerHTML = '';
+
+        if (result.items.length === 0) {
+          list.innerHTML = '<div class="fb-empty">No .md files or folders here.</div>';
+          return;
+        }
+
+        result.items.forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'fb-item ' + (item.isDir ? 'fb-dir' : 'fb-file');
+
+          // Raw filesystem entry names must go through textContent — a file
+          // named like HTML/event-handler markup would otherwise execute here.
+          const icon = document.createElement('span');
+          icon.className = 'fb-icon';
+          icon.textContent = item.isDir ? '📁' : '📄';
+
+          const nameSpan = document.createElement('span');
+          nameSpan.textContent = item.name;
+
+          div.append(icon, nameSpan);
+          div.title = item.path;
+          div.addEventListener('click', () => {
+            if (item.isDir) {
+              fbLoadDir(item.path);
+            } else {
+              // Select the file
+              document.getElementById('filePath').value = item.path;
+              fbClose();
+            }
+          });
+          list.appendChild(div);
+        });
+      }
+
+      function fbOpen() {
+        document.getElementById('fbOverlay').classList.add('open');
+        // Start from the directory of any already-entered path, or home
+        const existingPath = document.getElementById('filePath').value.trim();
+        let startDir = '';
+        if (existingPath) {
+          // Use the parent directory of whatever is already typed
+          const lastSep = Math.max(existingPath.lastIndexOf('/'), existingPath.lastIndexOf('\\'));
+          startDir = lastSep > 0 ? existingPath.substring(0, lastSep) : '';
+        }
+        fbLoadDir(startDir);
+      }
+
+      function fbClose() {
+        document.getElementById('fbOverlay').classList.remove('open');
+      }
+
+      document.getElementById('browseBtn').addEventListener('click', fbOpen);
+      document.getElementById('fbCloseBtn').addEventListener('click', fbClose);
+      document.getElementById('fbUpBtn').addEventListener('click', () => {
+        if (!fbCurrentDir) return;
+        const sep = fbCurrentDir.includes('/') ? '/' : '\\';
+        const parts = fbCurrentDir.split(sep).filter(Boolean);
+        parts.pop();
+        const parent = (fbCurrentDir.startsWith('/') ? '/' : '') + parts.join(sep);
+        fbLoadDir(parent || '/');
+      });
+
+      // Close overlay when clicking the backdrop
+      document.getElementById('fbOverlay').addEventListener('click', (e) => {
+        if (e.target === document.getElementById('fbOverlay')) fbClose();
+      });
+
+      // ── Drag & drop ─────────────────────────────────────────────────────────
+      // NOTE: SP captures drag events at the Electron window level before they
+      // reach the sandboxed plugin iframe. dragenter/dragover/drop never fire
+      // in this context, so drag & drop cannot be implemented from within the
+      // plugin. Use the Browse… button instead.
+      // These listeners are kept as a no-op safety net in case a future SP
+      // version forwards drag events to the iframe.
+      const fileInput = document.getElementById('filePath');
+      document.addEventListener('dragover', e => e.preventDefault());
+      document.addEventListener('drop',     e => e.preventDefault());
+
+      // ── Refresh button ──────────────────────────────────────────────────────
+      document.getElementById('refreshProjectsBtn').addEventListener('click', () => {
+        projectsLoadAttempts = 0;
+        loadProjects();
+      });
+
+      // ── Init ────────────────────────────────────────────────────────────────
+      async function init() {
+        let attempts = 0;
+        while (typeof PluginAPI === 'undefined' && attempts < 20) {
+          await new Promise(r => setTimeout(r, 100));
+          attempts++;
+        }
+        if (typeof PluginAPI === 'undefined') {
+          showStatus('PluginAPI not available — is this running inside Super Productivity?', 'error');
+          return;
+        }
+
+        await loadData();
+
+        // Re-load the project dropdown whenever the project list changes, so a
+        // newly created project appears without closing/reopening the panel.
+        // v0.4.0: config no longer lives in synced storage, so there is no
+        // persistedDataChanged to listen to — instead we react to projectListUpdate
+        // and ask the background (via the bridge) for its fresh _cachedProjects.
+        // Degrades gracefully: if the iframe never receives the hook, the ↺ button
+        // and reopening the panel still refresh the list.
+        if (PluginAPI.registerHook) {
+          try {
+            PluginAPI.registerHook('projectListUpdate', async () => {
+              try {
+                const res = await sendMessage({ type: 'getProjects' });
+                const fresh = res && res.success ? res.projects : null;
+                if (fresh && Array.isArray(fresh) && fresh.length > 0) {
+                  const newJson = JSON.stringify(fresh);
+                  const oldJson = JSON.stringify(projects);
+                  if (newJson !== oldJson) {
+                    projects = fresh;
+                    projectsLoadAttempts = 0;
+                    await loadProjects();
+                  }
+                }
+              } catch (e) {
+                console.error('[sync-md] projectListUpdate handler error:', e);
+              }
+            });
+          } catch (e) {
+            console.warn('[sync-md] Could not register projectListUpdate hook in iframe:', e);
+          }
+        }
+      }
+
+      init();
+    </script>
+  </body>
+</html>

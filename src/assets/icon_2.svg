@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">
+  <!-- front document -->
+  <rect x="4" y="3" width="11" height="14" rx="1.5" stroke-width="1.5" fill="none"/>
+  <!-- bold tick -->
+  <path d="M6 9L8.5 11.5L13 6" stroke-width="2" fill="none"/>
+  <!-- separator line -->
+  <line x1="4" y1="14" x2="15" y2="14" stroke-width="1"/>
+  <!-- sync arrow -->
+  <line x1="19" y1="5" x2="19" y2="14" stroke-width="1.5"/>
+  <polyline points="17.5,6.5 19,5 20.5,6.5" stroke-width="1.5" fill="none"/>
+  <polyline points="17.5,12.5 19,14 20.5,12.5" stroke-width="1.5" fill="none"/>
+</svg>
