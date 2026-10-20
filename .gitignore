@@ -6,6 +6,7 @@ node_modules/
 .build/
 tsconfig.build.json
 .DS_Store
+.secret
 
 # Historical development documentation — kept locally for reference, not published
 History Documentation/
