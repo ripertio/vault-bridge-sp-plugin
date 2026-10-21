@@ -1,4 +1,4 @@
-import { DailyNoteCfg, ensureToDosSection, findToDosSection } from './daily-note';
+import { DailyNoteCfg, findToDosSection } from './daily-note';
 
 // Inbox project ID observed in live SP task data (getTasks), not yet documented.
 export const INBOX_PROJECT_ID = 'INBOX_PROJECT';
@@ -34,9 +34,20 @@ export const planDailyNote = (
   plannedTasks: DailyPlanTask[],
 ): DailyPlanResult => {
   const planned = plannedTasks.filter((t) => cfg.includeInbox || !isInbox(t.projectId));
-  const withSection = ensureToDosSection(lines);
+  // Never create a heading for existing notes. Only a completely empty note gets
+  // the ## To Dos heading, so the first write has a place to go.
+  const isEmpty = lines.every((l) => l.trim() === '');
+  const withSection = isEmpty ? ['## To Dos'] : [...lines];
   const section = findToDosSection(withSection);
-  const bodyText = section ? withSection.slice(section.bodyStart, section.bodyEnd).join('\n') : '';
+  if (!section) {
+    return {
+      missingTaskIds: [],
+      statusChangedTaskIds: [],
+      nextLines: [...lines],
+      logLines: ['## To Dos not found, nothing added'],
+    };
+  }
+  const bodyText = withSection.slice(section.bodyStart, section.bodyEnd).join('\n');
 
   const missing = planned.filter((t) => !bodyText.includes(`<!--${t.id}-->`));
   const newLines = missing.map((t) => `- [${t.isDone ? 'x' : ' '}] <!--${t.id}--> ${t.title}`);
@@ -46,7 +57,7 @@ export const planDailyNote = (
   // SP → Markdown only: flip the checkbox of an existing line to match SP's done
   // state. The rest of the line (title, notes, other lines) is left untouched.
   const statusChanged: string[] = [];
-  if (section) {
+  {
     for (const t of planned) {
       const marker = `<!--${t.id}-->`;
       for (let i = section.bodyStart; i < section.bodyEnd; i++) {
@@ -63,7 +74,7 @@ export const planDailyNote = (
     }
   }
 
-  if (section && newLines.length > 0) {
+  if (newLines.length > 0) {
     // Insert after the last non-blank body line so trailing blank lines stay put.
     let insertAt = section.bodyEnd;
     while (insertAt > section.bodyStart && withSection[insertAt - 1].trim() === '') {

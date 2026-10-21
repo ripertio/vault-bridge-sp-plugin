@@ -37,10 +37,16 @@ describe('planDailyNote', () => {
     expect(result.nextLines).toEqual(['## To Dos', '- [x] <!--p1--> Project task']);
   });
 
-  it('creates the ## To Dos heading when it is absent', () => {
-    const result = planDailyNote(cfg, ['# Day'], [proj]);
-    expect(result.nextLines).toEqual(['# Day', '', '## To Dos', '- [x] <!--p1--> Project task']);
-    expect(result.missingTaskIds).toEqual(['p1']);
+  it('never adds a heading when ## To Dos is absent', () => {
+    const lines = ['# Day', 'text'];
+    const result = planDailyNote(cfg, lines, [proj]);
+    expect(result.nextLines).toEqual(lines);
+    expect(result.missingTaskIds).toEqual([]);
+  });
+
+  it('adds only under an existing ## To Dos, never a new heading', () => {
+    const result = planDailyNote(cfg, [], [proj]);
+    expect(result.nextLines).toEqual(['## To Dos', '- [x] <!--p1--> Project task']);
   });
 
   it('excludes Inbox tasks when includeInbox is off', () => {
