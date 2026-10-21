@@ -6,6 +6,7 @@ import {
   formatDailyFilename,
   plannedTaskIdsForToday,
   resolveDailyNoteCfg,
+  resolveInsideVault,
 } from '../daily-note';
 
 const OCT_21 = new Date(2026, 9, 21);
@@ -121,5 +122,20 @@ describe('resolveDailyNoteCfg', () => {
     const cfg = resolveDailyNoteCfg({ enabled: true, folder: 'Journal' });
     expect(cfg).toEqual({ ...DEFAULT_DAILY_NOTE_CFG, enabled: true, folder: 'Journal' });
     expect(cfg.dryRun).toBe(true);
+  });
+});
+
+describe('resolveInsideVault', () => {
+  it('joins the vault root and relative path', () => {
+    expect(resolveInsideVault('/vault/', 'Daily/2026-10-21.md')).toBe('/vault/Daily/2026-10-21.md');
+  });
+
+  it('rejects a relative vault root', () => {
+    expect(() => resolveInsideVault('vault', 'Daily/x.md')).toThrow();
+  });
+
+  it('rejects traversal and absolute relative paths', () => {
+    expect(() => resolveInsideVault('/vault', '../etc/x.md')).toThrow();
+    expect(() => resolveInsideVault('/vault', '/etc/passwd')).toThrow();
   });
 });

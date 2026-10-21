@@ -4,6 +4,8 @@ import type { LocalUserCfgV2 } from './local-config';
 import { fetchLatestRelease, isNewerVersion } from './update-check';
 import type { UpdateInfo } from './update-check';
 import { log } from '../shared/logger';
+import { runDailyNoteDryRun } from './daily/daily-runner';
+import { resolveDailyNoteCfg } from './daily/daily-note';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
 declare const __PLUGIN_VERSION__: string;
@@ -396,6 +398,11 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
   } catch {
     /* no legacy synced data (or API unavailable) — nothing to migrate */
   }
+
+  // Daily notes: dry-run only, and only when the user has enabled it.
+  void runDailyNoteDryRun(resolveDailyNoteCfg(currentConfig.daily)).catch((err) =>
+    log.error('daily dry-run failed', err),
+  );
 
   activeBindingsJson = JSON.stringify(currentConfig?.bindings ?? []);
   if (currentConfig?.bindings && currentConfig.bindings.length > 0) {

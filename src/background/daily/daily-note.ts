@@ -13,6 +13,8 @@ export interface DailyNoteCfg {
   filenameFormat: string;
   // Include Inbox tasks in the daily note.
   includeInbox: boolean;
+  // Absolute vault root. Every daily-note path must resolve inside it.
+  vaultRoot: string;
 }
 
 export const DEFAULT_DAILY_NOTE_CFG: DailyNoteCfg = {
@@ -21,6 +23,7 @@ export const DEFAULT_DAILY_NOTE_CFG: DailyNoteCfg = {
   folder: 'Daily',
   filenameFormat: 'YYYY-MM-DD',
   includeInbox: true,
+  vaultRoot: '',
 };
 
 // SP's virtual "Today" tag ID. Observed in the SP 19.2.0 bundle; not yet
@@ -97,3 +100,20 @@ export const resolveDailyNoteCfg = (stored?: Partial<DailyNoteCfg>): DailyNoteCf
   ...DEFAULT_DAILY_NOTE_CFG,
   ...(stored ?? {}),
 });
+
+/**
+ * Join a vault-relative path onto the absolute vault root, rejecting any result
+ * outside it. Lexical check only; the caller is responsible for resolving
+ * symlinks when a Node call is available.
+ */
+export const resolveInsideVault = (vaultRoot: string, relative: string): string => {
+  const root = vaultRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+  if (!root.startsWith('/') && !/^[a-zA-Z]:\//.test(root)) {
+    throw new Error('[sync-md] Vault root must be an absolute path');
+  }
+  const rel = relative.replace(/\\/g, '/');
+  if (rel.startsWith('/') || rel.split('/').some((s) => s === '..')) {
+    throw new Error('[sync-md] Daily note path escapes the vault');
+  }
+  return `${root}/${rel}`;
+};
