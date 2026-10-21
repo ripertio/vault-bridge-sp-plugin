@@ -33,7 +33,9 @@ export const runDailyNoteDryRun = async (cfg: DailyNoteCfg, now: Date = new Date
     log.log(`daily note missing, not created: ${notePath}`);
     return;
   }
-  const lines = content.split('\n');
+  // An empty note is zero lines, not one blank line; otherwise the heading lands
+  // after a stray leading blank line.
+  const lines = content === '' ? [] : content.split('\n');
   const result = planDailyNote(cfg, lines, planned);
 
   log.log(`daily ${cfg.dryRun ? 'dry-run' : 'sync'} ${notePath}`);

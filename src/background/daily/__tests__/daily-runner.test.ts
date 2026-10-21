@@ -75,6 +75,16 @@ describe('runDailyNoteDryRun', () => {
     );
   });
 
+  it('writes an empty existing note without a leading blank line', async () => {
+    mockedRead.mockResolvedValue('');
+    setSp(['p1']);
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, NOW);
+    expect(mockedWrite).toHaveBeenCalledWith(
+      '/vault/Daily/2026-10-21.md',
+      '## To Dos\n- [ ] <!--p1--> Project task',
+    );
+  });
+
   it('does not write when nothing is missing', async () => {
     mockedRead.mockResolvedValue('## To Dos\n- [x] <!--p1--> Project task');
     setSp(['p1']);
