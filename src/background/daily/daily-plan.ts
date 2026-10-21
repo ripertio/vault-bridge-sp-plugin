@@ -18,6 +18,8 @@ export interface DailyPlanResult {
   missingTaskIds: string[];
   // The note lines that would be written. Equal to the input when nothing changes.
   nextLines: string[];
+  // Existing lines whose checkbox was flipped to match SP.
+  statusChangedTaskIds: string[];
   // Human-readable lines for the dry-run log.
   logLines: string[];
 }
@@ -40,6 +42,27 @@ export const planDailyNote = (
   const newLines = missing.map((t) => `- [${t.isDone ? 'x' : ' '}] <!--${t.id}--> ${t.title}`);
 
   const nextLines = [...withSection];
+
+  // SP → Markdown only: flip the checkbox of an existing line to match SP's done
+  // state. The rest of the line (title, notes, other lines) is left untouched.
+  const statusChanged: string[] = [];
+  if (section) {
+    for (const t of planned) {
+      const marker = `<!--${t.id}-->`;
+      for (let i = section.bodyStart; i < section.bodyEnd; i++) {
+        const line = nextLines[i];
+        const match = /^(\s*[-*]\s*\[)([ xX])(\]\s*<!--)/.exec(line);
+        if (!match || !line.includes(marker)) continue;
+        const want = t.isDone ? 'x' : ' ';
+        if (match[2].toLowerCase() !== want) {
+          nextLines[i] = line.replace(/^(\s*[-*]\s*\[)([ xX])/, `$1${want}`);
+          statusChanged.push(t.id);
+        }
+        break;
+      }
+    }
+  }
+
   if (section && newLines.length > 0) {
     // Insert after the last non-blank body line so trailing blank lines stay put.
     let insertAt = section.bodyEnd;
@@ -52,10 +75,13 @@ export const planDailyNote = (
   const logLines = [
     `would add ${missing.length} task(s) to ## To Dos`,
     ...missing.map((t) => `  + ${t.id} ${t.title}`),
+    `would update ${statusChanged.length} checkbox(es)`,
+    ...statusChanged.map((id) => `  ~ ${id}`),
   ];
 
   return {
     missingTaskIds: missing.map((t) => t.id),
+    statusChangedTaskIds: statusChanged,
     nextLines,
     logLines,
   };

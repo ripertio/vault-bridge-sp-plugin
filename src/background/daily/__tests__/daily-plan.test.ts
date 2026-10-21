@@ -34,7 +34,7 @@ describe('planDailyNote', () => {
     const lines = ['## To Dos', '- [ ] <!--p1--> Project task'];
     const result = planDailyNote(cfg, lines, [proj]);
     expect(result.missingTaskIds).toEqual([]);
-    expect(result.nextLines).toEqual(lines);
+    expect(result.nextLines).toEqual(['## To Dos', '- [x] <!--p1--> Project task']);
   });
 
   it('creates the ## To Dos heading when it is absent', () => {
@@ -77,5 +77,44 @@ describe('planDailyNote write output', () => {
     const lines = ['## To Dos', '- [x] <!--p1--> Project task'];
     const result = planDailyNote(cfg, lines, [proj]);
     expect(result.nextLines.join('\n')).toBe(lines.join('\n'));
+  });
+});
+
+describe('planDailyNote checkbox sync (SP → Markdown)', () => {
+  const open = { id: 'p1', title: 'Project task', isDone: false, projectId: 'S3' };
+  const done = { ...open, isDone: true };
+
+  it('checks a line when the SP task is done', () => {
+    const lines = ['## To Dos', '- [ ] <!--p1--> Project task'];
+    const result = planDailyNote(cfg, lines, [done]);
+    expect(result.nextLines).toEqual(['## To Dos', '- [x] <!--p1--> Project task']);
+    expect(result.statusChangedTaskIds).toEqual(['p1']);
+    expect(result.missingTaskIds).toEqual([]);
+  });
+
+  it('unchecks a line when the SP task is reopened', () => {
+    const lines = ['## To Dos', '- [x] <!--p1--> Project task'];
+    const result = planDailyNote(cfg, lines, [open]);
+    expect(result.nextLines).toEqual(['## To Dos', '- [ ] <!--p1--> Project task']);
+    expect(result.statusChangedTaskIds).toEqual(['p1']);
+  });
+
+  it('leaves the title and other lines untouched', () => {
+    const lines = ['## To Dos', '- [ ] <!--p1--> My edited title', 'Some note', '- [ ] <!--x--> other'];
+    const result = planDailyNote(cfg, lines, [done]);
+    expect(result.nextLines).toEqual(['## To Dos', '- [x] <!--p1--> My edited title', 'Some note', '- [ ] <!--x--> other']);
+  });
+
+  it('reports no change when the checkbox already matches', () => {
+    const lines = ['## To Dos', '- [x] <!--p1--> Project task'];
+    const result = planDailyNote(cfg, lines, [done]);
+    expect(result.statusChangedTaskIds).toEqual([]);
+    expect(result.nextLines).toEqual(lines);
+  });
+
+  it('does not touch lines outside ## To Dos', () => {
+    const lines = ['## Notes', '- [ ] <!--p1--> outside', '## To Dos'];
+    const result = planDailyNote(cfg, lines, [done]);
+    expect(result.nextLines).toEqual([...lines, '- [x] <!--p1--> Project task']);
   });
 });

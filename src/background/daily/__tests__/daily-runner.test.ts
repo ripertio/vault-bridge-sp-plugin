@@ -85,8 +85,23 @@ describe('runDailyNoteDryRun', () => {
     );
   });
 
-  it('does not write when nothing is missing', async () => {
-    mockedRead.mockResolvedValue('## To Dos\n- [x] <!--p1--> Project task');
+  it('writes when only a checkbox needs updating', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--p1--> Project task');
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: ['p1'] }]),
+      getTasks: jest.fn().mockResolvedValue([
+        { id: 'p1', title: 'Project task', isDone: true, projectId: 'S3' },
+      ]),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, NOW);
+    expect(mockedWrite).toHaveBeenCalledWith(
+      '/vault/Daily/2026-10-21.md',
+      '## To Dos\n- [x] <!--p1--> Project task',
+    );
+  });
+
+  it('does not write when nothing is missing and checkboxes match', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--p1--> Project task');
     setSp(['p1']);
     await runDailyNoteDryRun({ ...cfg, dryRun: false }, NOW);
     expect(mockedWrite).not.toHaveBeenCalled();

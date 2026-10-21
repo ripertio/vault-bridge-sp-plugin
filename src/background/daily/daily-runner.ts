@@ -41,7 +41,8 @@ export const runDailyNoteDryRun = async (cfg: DailyNoteCfg, now: Date = new Date
   log.log(`daily ${cfg.dryRun ? 'dry-run' : 'sync'} ${notePath}`);
   result.logLines.forEach((line) => log.log(line));
 
-  if (cfg.dryRun || result.missingTaskIds.length === 0) return;
+  const changes = result.missingTaskIds.length + result.statusChangedTaskIds.length;
+  if (cfg.dryRun || changes === 0) return;
 
   // Re-read right before writing: if the user edited the note since the plan was
   // computed, skip this write rather than overwrite their change.
@@ -51,5 +52,5 @@ export const runDailyNoteDryRun = async (cfg: DailyNoteCfg, now: Date = new Date
     return;
   }
   await writeTasksFile(notePath, result.nextLines.join('\n'));
-  log.log(`daily note updated: +${result.missingTaskIds.length} task(s)`);
+  log.log(`daily note updated: +${result.missingTaskIds.length} task(s), ~${result.statusChangedTaskIds.length} checkbox(es)`);
 };
