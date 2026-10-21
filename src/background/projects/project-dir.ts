@@ -7,12 +7,16 @@ export interface ProjectsDirCfg {
   projectsDir: string;
   // Names excluded from sync on both sides (folder names and project titles).
   excluded: string[];
+  // Manual links: folder path (relative to projectsDir, e.g. "Inbox/backlog.md") →
+  // SP project ID. A manual link wins over the title match.
+  folderBinds?: Record<string, string>;
 }
 
 export const DEFAULT_PROJECTS_DIR_CFG: ProjectsDirCfg = {
   enabled: false,
   projectsDir: 'Projects',
   excluded: [],
+  folderBinds: {},
 };
 
 export type ProjectsDirValidation =
@@ -68,12 +72,25 @@ export const matchFoldersToProjects = (
   folders: string[],
   projects: ProjectRef[],
   excluded: string[],
+  folderBinds: Record<string, string> = {},
 ): FolderMatchResult => {
   const skip = new Set(excluded);
   const eligible = projects.filter((p) => p.id !== INBOX_PROJECT_ID && !skip.has(p.title));
 
+  // Manual links first: a bound folder pairs with its chosen project and is not
+  // considered again by title. Both sides must still exist and not be excluded.
+  const eligibleIds = new Set(eligible.map((p) => p.id));
+  const manual = new Map<string, string>();
+  for (const [folder, projectId] of Object.entries(folderBinds)) {
+    if (folders.includes(folder) && eligibleIds.has(projectId) && !skip.has(folder)) {
+      manual.set(folder, projectId);
+    }
+  }
+  const boundProjectIds = new Set(manual.values());
+  const unboundProjects = eligible.filter((p) => !boundProjectIds.has(p.id));
+
   const byTitle = new Map<string, ProjectRef[]>();
-  for (const p of eligible) byTitle.set(p.title, [...(byTitle.get(p.title) ?? []), p]);
+  for (const p of unboundProjects) byTitle.set(p.title, [...(byTitle.get(p.title) ?? []), p]);
 
   const result: FolderMatchResult = {
     matched: [],
@@ -82,6 +99,11 @@ export const matchFoldersToProjects = (
     ambiguous: [],
   };
   const seenFolders = new Set<string>();
+
+  for (const [folder, projectId] of manual) {
+    seenFolders.add(folder);
+    result.matched.push({ folder, projectId });
+  }
 
   for (const folder of folders) {
     if (skip.has(folder) || seenFolders.has(folder)) continue;
@@ -92,8 +114,9 @@ export const matchFoldersToProjects = (
     else result.foldersWithoutProject.push(folder);
   }
 
+  const linkedProjectIds = new Set(result.matched.map((m) => m.projectId));
   for (const p of eligible) {
-    if (!seenFolders.has(p.title)) result.projectsWithoutFolder.push(p);
+    if (!linkedProjectIds.has(p.id) && !seenFolders.has(p.title)) result.projectsWithoutFolder.push(p);
   }
   return result;
 };
@@ -101,3 +124,14 @@ export const matchFoldersToProjects = (
 /** A plain folder name: non-empty, no separators, not '.' or '..'. */
 export const validFolderName = (name: string): boolean =>
   name.length > 0 && !/[\\/]/.test(name) && name !== '.' && name !== '..';
+
+/**
+ * A manual bind's folder must be a markdown file path inside the projects folder:
+ * relative, no '..', ending in .md. Pure.
+ */
+export const validBindFile = (relative: string): boolean => {
+  const p = relative.replace(/\\/g, '/');
+  if (!p || p.startsWith('/') || /^[a-zA-Z]:/.test(p)) return false;
+  if (p.split('/').some((seg) => seg === '..' || seg === '.' || seg === '')) return false;
+  return /\.md$/i.test(p);
+};

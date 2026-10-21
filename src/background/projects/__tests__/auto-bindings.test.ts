@@ -33,3 +33,15 @@ describe('bindingsFromMatches', () => {
     expect(b.filePath).toBe('/vault/Projects/A/backlog.md');
   });
 });
+
+describe('bindingsFromMatches with manual binds', () => {
+  it('uses a bound markdown file as-is instead of appending backlog.md', () => {
+    const [b] = bindingsFromMatches(
+      { matched: [{ folder: 'Inbox/notes.md', projectId: 'p1' }], foldersWithoutProject: [], projectsWithoutFolder: [], ambiguous: [] },
+      '/vault/Projects',
+      { p1: 'Alpha' },
+    );
+    expect(b.filePath).toBe('/vault/Projects/Inbox/notes.md');
+    expect(b.projectTitle).toBe('Alpha');
+  });
+});

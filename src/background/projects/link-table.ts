@@ -21,9 +21,10 @@ export const buildLinkTable = (
   folders: string[],
   projects: ProjectRef[],
   excluded: string[],
+  folderBinds: Record<string, string> = {},
 ): LinkRow[] => {
   const skip = new Set(excluded);
-  const match = matchFoldersToProjects(folders, projects, excluded);
+  const match = matchFoldersToProjects(folders, projects, excluded, folderBinds);
   const rows: LinkRow[] = [];
 
   for (const m of match.matched) {

@@ -10,13 +10,18 @@ import { FolderMatchResult } from './project-dir';
 export const bindingsFromMatches = (
   match: FolderMatchResult,
   projectsDirAbs: string,
+  titles: Record<string, string> = {},
 ): SyncBindingCfg[] => {
   const base = projectsDirAbs.replace(/[\\/]+$/, '');
-  return match.matched.map(({ folder, projectId }) => ({
-    id: `auto-${projectId}`,
-    filePath: `${base}/${folder}/backlog.md`,
-    projectId,
-    enabled: true,
-    projectTitle: folder,
-  }));
+  return match.matched.map(({ folder, projectId }) => {
+    // A manual bind points at a markdown file; a folder match points at its backlog.md.
+    const isFile = /\.md$/i.test(folder);
+    return {
+      id: `auto-${projectId}`,
+      filePath: isFile ? `${base}/${folder}` : `${base}/${folder}/backlog.md`,
+      projectId,
+      enabled: true,
+      projectTitle: titles[projectId] ?? folder,
+    };
+  });
 };

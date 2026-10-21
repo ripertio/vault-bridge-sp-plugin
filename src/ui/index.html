@@ -234,6 +234,19 @@
       </div>
     </div>
 
+    <!-- ── Bind a file to an SP project ─────────────────────────────────── -->
+    <div class="modal-overlay" id="bindOverlay">
+      <div class="modal-panel">
+        <h3>Bind to SP project</h3>
+        <p>File: <code id="bindFile"></code></p>
+        <div class="form-group"><select id="bindProjectSelect"></select></div>
+        <div class="modal-actions">
+          <button class="btn btn-outline" id="bindCancelBtn">Cancel</button>
+          <button class="btn btn-primary" id="bindConfirmBtn">Bind</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Delete-binding confirm modal (3 options) ─────────────────────── -->
     <div class="modal-overlay" id="confirmOverlay">
       <div class="modal-panel">
@@ -786,7 +799,7 @@
                   const full = path.join(dir, e.name);
                   const isDir = e.isDirectory();
                   const isMd = !isDir && /\\.md$/i.test(e.name);
-                  if (isDir || (isMd && !args[1])) {
+                  if (isDir || (isMd && args[1] !== 'folder')) {
                     items.push({ name: e.name, isDir, path: full });
                   }
                 }
@@ -806,7 +819,7 @@
                 return { success: false, error: e.message };
               }
             `,
-            args: [dirPath || '', fbFolderMode],
+            args: [dirPath || '', fbFolderMode ? 'folder' : 'file'],
             timeout: 5000,
           });
           result = r && r.result;
@@ -850,6 +863,16 @@
             if (item.isDir) {
               fbLoadDir(item.path);
             } else {
+              if (fbFileCallback) {
+                const vault = document.getElementById('vaultPath').value.trim().replace(/[\\/]+$/, '');
+                const projDir = document.getElementById('projectsDir').value.trim().replace(/[\\/]+$/, '');
+                const base = vault + '/' + projDir + '/';
+                const cb = fbFileCallback;
+                fbClose();
+                if (item.path.startsWith(base)) cb(item.path.slice(base.length));
+                else showStatus('Choose a file inside the projects folder.', 'error');
+                return;
+              }
               // Select the file
               document.getElementById('filePath').value = item.path;
               fbClose();
@@ -862,6 +885,7 @@
       // Folder mode: the browser picks a directory (no .md files) for `fbTarget`.
       let fbFolderMode = false;
       let fbTarget = null;
+      let fbFileCallback = null;
 
       function fbOpenFolder(targetInputId, startDir) {
         fbFolderMode = true;
@@ -876,9 +900,20 @@
         fbLoadDir(startDir || '');
       }
 
+      // Pick a .md file inside the projects folder and hand its relative path to cb.
+      function fbPickBindFile(cb) {
+        fbFolderMode = false;
+        fbTarget = null;
+        fbFileCallback = cb;
+        const vault = document.getElementById('vaultPath').value.trim().replace(/[\\/]+$/, '');
+        const projDir = document.getElementById('projectsDir').value.trim();
+        fbOpenAt(vault && projDir ? vault + '/' + projDir : vault);
+      }
+
       function fbResetMode() {
         fbFolderMode = false;
         fbTarget = null;
+        fbFileCallback = null;
         document.getElementById('fbUseFolderBtn').style.display = 'none';
       }
 
@@ -1086,7 +1121,18 @@
             btn.addEventListener('click', () => setLinkOverride(r.name, true));
           }
           actions.appendChild(btn);
-          // Offer to create the missing side (the sync also does this in write mode).
+          // Bind a folder-only file to a project, or a project-only row to a file.
+          if (r.state === 'folder-only' || r.state === 'project-only' || r.state === 'ambiguous') {
+            const bind = document.createElement('button');
+            bind.type = 'button';
+            bind.className = 'btn btn-outline';
+            bind.style.padding = '2px 8px';
+            bind.style.marginLeft = '4px';
+            bind.textContent = 'Bind…';
+            bind.addEventListener('click', () => startBind(r));
+            actions.appendChild(bind);
+          }
+          // Offer to create the missing side. The SP dialog confirms before it happens.
           if (r.state === 'folder-only' || r.state === 'project-only') {
             const create = document.createElement('button');
             create.type = 'button';
@@ -1096,7 +1142,7 @@
             create.textContent = r.state === 'folder-only' ? 'Create project' : 'Create folder';
             create.addEventListener('click', async () => {
               const res = await sendMessage({
-                type: 'createLinkSide',
+                type: 'confirmCreateLinkSide',
                 side: r.state === 'folder-only' ? 'project' : 'folder',
                 name: r.name,
                 projectId: r.projectId,
@@ -1132,6 +1178,36 @@
       }
 
       document.getElementById('linksRefreshBtn').addEventListener('click', refreshLinks);
+
+      // Bind: pick a .md file in the projects folder, then a project from a list.
+      async function startBind(row) {
+        fbPickBindFile((file) => { if (file) chooseBindProject(file, row); });
+      }
+
+      // Project list comes from the panel's own project cache (no free typing).
+      function chooseBindProject(file, row) {
+        const overlay = document.getElementById('bindOverlay');
+        const select = document.getElementById('bindProjectSelect');
+        document.getElementById('bindFile').textContent = file;
+        select.innerHTML = '';
+        projects.forEach((p) => {
+          const o = document.createElement('option');
+          o.value = p.id;
+          o.textContent = p.title;
+          if (p.id === row.projectId) o.selected = true;
+          select.appendChild(o);
+        });
+        overlay.classList.add('open');
+        document.getElementById('bindConfirmBtn').onclick = async () => {
+          overlay.classList.remove('open');
+          const res = await sendMessage({ type: 'setFolderBind', file, projectId: select.value });
+          if (!res || !res.success) { showStatus('Bind failed: ' + ((res && res.error) || 'no response'), 'error'); return; }
+          showStatus('Bound ' + file, 'success');
+          await refreshLinks();
+        };
+        document.getElementById('bindCancelBtn').onclick = () => overlay.classList.remove('open');
+      }
+
 
       async function init() {
         let attempts = 0;

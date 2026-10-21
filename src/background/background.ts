@@ -16,7 +16,7 @@ import { planRenames } from './projects/rename';
 import { effectiveVaultPath, validateVaultPath } from './vault';
 import { folderListChanged } from './projects/folder-poll';
 import { buildLinkTable, ignoreRow, unignoreRow } from './projects/link-table';
-import { validFolderName } from './projects/project-dir';
+import { validFolderName, validBindFile } from './projects/project-dir';
 import { lazySetInterval } from './helper/lazy-set-interval';
 import { spToMd } from './sync/sp-to-md';
 import { createSpProject } from './sync/missing-resource';
@@ -348,6 +348,37 @@ const startFolderPoll = (): void => {
   }, PROJECTS_FOLDER_POLL_MS);
 };
 
+const escapeHtmlText = (s: string): string =>
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+// Create the missing side of one link row (write mode). Shared by the direct and
+// the confirmed path, so both do the same checks.
+const handleCreateLinkSide = async (message: any): Promise<{ success: boolean; error?: string; created?: boolean }> => {
+  if (resolveDailyNoteCfg(currentConfig.daily).dryRun) {
+    return { success: false, error: 'Write mode is off. Turn on writes in Daily Notes to create.' };
+  }
+  const vault = effectiveVaultPath(currentConfig);
+  const dirCfg = resolveProjectsDirCfg(currentConfig.projectsDir);
+  const absDir = `${vault.replace(/[\\/]+$/, '')}/${dirCfg.projectsDir}`;
+  const name = String(message.name ?? '').trim();
+  try {
+    if (message.side === 'project') {
+      if (!validFolderName(name)) return { success: false, error: 'Invalid project name.' };
+      await createSpProject(name);
+    } else {
+      if (!validFolderName(name)) return { success: false, error: 'Invalid folder name.' };
+      const projectId = String(message.projectId ?? '');
+      const project = (await PluginAPI.getAllProjects()).find((p) => p.id === projectId);
+      if (!project) return { success: false, error: 'SP project not found.' };
+      await spToMd({ id: `create-${projectId}`, filePath: `${absDir}/${name}/backlog.md`, projectId, enabled: true, projectTitle: name });
+    }
+    void startBindings();
+    return { success: true, created: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) };
+  }
+};
+
 const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
   try {
     const newBindingsJson = JSON.stringify(incoming?.bindings ?? []);
@@ -606,39 +637,61 @@ const dailyDeps = () => ({
           const absDir = `${vault.replace(/[\\/]+$/, '')}/${dirCfg.projectsDir}`;
           const folders = await listSubfolders(absDir);
           const projects = (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title }));
-          return { success: true, rows: buildLinkTable(folders, projects, dirCfg.excluded) };
+          return { success: true, rows: buildLinkTable(folders, projects, dirCfg.excluded, dirCfg.folderBinds ?? {}) };
         } catch (err) {
           return { success: false, error: err instanceof Error ? err.message : String(err) };
         }
       }
-      if (type === 'createLinkSide') {
-        // Create the missing side of one row, with the same helpers the sync uses.
-        // Write mode only: the daily write switch gates it, as everywhere else.
-        if (resolveDailyNoteCfg(currentConfig.daily).dryRun) {
-          return { success: false, error: 'Write mode is off. Turn on writes in Daily Notes to create.' };
-        }
-        const vault = effectiveVaultPath(currentConfig);
-        const dirCfg = resolveProjectsDirCfg(currentConfig.projectsDir);
-        const absDir = `${vault.replace(/[\\/]+$/, '')}/${dirCfg.projectsDir}`;
+      if (type === 'confirmCreateLinkSide') {
+        // Show an SP confirmation first. Nothing is created until its button is
+        // pressed. The plugin API cannot return typed text, so the name comes from the
+        // panel and this dialog only confirms it.
+        const side = message.side === 'project' ? 'project' : 'folder';
         const name = String(message.name ?? '').trim();
-        try {
-          if (message.side === 'project') {
-            if (!validFolderName(name)) return { success: false, error: 'Invalid project name.' };
-            await createSpProject(name);
-            // The sync links it on the next run.
-          } else {
-            // Only an existing SP project may get a folder, looked up by ID here.
-            const projectId = String(message.projectId ?? '');
-            const project = (await PluginAPI.getAllProjects()).find((p) => p.id === projectId);
-            if (!project) return { success: false, error: 'SP project not found.' };
-            if (!validFolderName(name)) return { success: false, error: 'Invalid folder name.' };
-            await spToMd({ id: `create-${projectId}`, filePath: `${absDir}/${name}/backlog.md`, projectId, enabled: true, projectTitle: name });
-          }
-          void startBindings();
-          return { success: true };
-        } catch (err) {
-          return { success: false, error: err instanceof Error ? err.message : String(err) };
+        if (!validFolderName(name)) return { success: false, error: 'Invalid name.' };
+        const api = PluginAPI as unknown as { openDialog?: (cfg: any) => Promise<void> };
+        if (typeof api.openDialog !== 'function') {
+          return { success: false, error: 'SP dialogs are not available in this version.' };
         }
+        let confirmed = false;
+        await api.openDialog({
+          title: side === 'project' ? 'Create SP project?' : 'Create folder?',
+          htmlContent:
+            `<p>Create the ${side} <strong>${escapeHtmlText(name)}</strong>` +
+            (side === 'folder' ? ' with a backlog.md' : ' in Super Productivity') + '?</p>',
+          buttons: [
+            { label: 'Create', color: 'primary', onClick: () => { confirmed = true; } },
+            { label: 'Cancel' },
+          ],
+        });
+        if (!confirmed) return { success: true, created: false };
+        return handleCreateLinkSide({ side, name, projectId: message.projectId });
+      }
+      if (type === 'createLinkSide') {
+        return handleCreateLinkSide(message);
+      }
+      if (type === 'setFolderBind') {
+        // Manually link a markdown file (inside the projects folder) to an SP project.
+        // Pass projectId null to clear the bind for that file.
+        const dirCfg = resolveProjectsDirCfg(currentConfig.projectsDir);
+        const file = String(message.file ?? '').trim();
+        const projectId = message.projectId ? String(message.projectId) : null;
+        if (!validBindFile(file)) return { success: false, error: 'Choose a .md file inside the projects folder.' };
+        const binds = { ...(dirCfg.folderBinds ?? {}) };
+        if (projectId === null) {
+          delete binds[file];
+        } else {
+          const project = (await PluginAPI.getAllProjects()).find((p) => p.id === projectId);
+          if (!project) return { success: false, error: 'SP project not found.' };
+          // A project can be bound to one file only; the old bind for it is dropped.
+          for (const k of Object.keys(binds)) if (binds[k] === projectId) delete binds[k];
+          binds[file] = projectId;
+        }
+        currentConfig = { ...currentConfig, projectsDir: { ...dirCfg, folderBinds: binds } };
+        persistConfig();
+        void startBindings();
+        startFolderPoll();
+        return { success: true, folderBinds: binds };
       }
       if (type === 'setLinkOverride') {
         // Ignore/unignore changes the excluded list, which both sides already honour.

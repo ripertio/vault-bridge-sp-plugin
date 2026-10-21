@@ -27,8 +27,9 @@ export const computeEffectiveBindings = async (
   const absDir = `${vaultPath.replace(/[\\/]+$/, '')}/${projectsDir.projectsDir}`;
   try {
     const [folders, projects] = await Promise.all([deps.listFolders(absDir), deps.getProjects()]);
-    const match = matchFoldersToProjects(folders, projects, projectsDir.excluded);
-    return { ok: true, bindings: bindingsFromMatches(match, absDir) };
+    const match = matchFoldersToProjects(folders, projects, projectsDir.excluded, projectsDir.folderBinds ?? {});
+    const titles = Object.fromEntries(projects.map((p) => [p.id, p.title]));
+    return { ok: true, bindings: bindingsFromMatches(match, absDir, titles) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

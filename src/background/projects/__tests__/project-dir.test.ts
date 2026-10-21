@@ -1,6 +1,7 @@
 import {
   matchFoldersToProjects,
   validFolderName,
+  validBindFile,
   resolveProjectsDirCfg,
   validateProjectsDirCfg,
   DEFAULT_PROJECTS_DIR_CFG,
@@ -17,7 +18,7 @@ describe('validateProjectsDirCfg', () => {
     const r = validateProjectsDirCfg({ projectsDir: 'Projects/', excluded: [' Old ', 'Old', ''] });
     expect(r).toEqual({
       ok: true,
-      cfg: { enabled: false, projectsDir: 'Projects', excluded: ['Old'] },
+      cfg: { enabled: false, projectsDir: 'Projects', excluded: ['Old'], folderBinds: {} },
     });
   });
 
@@ -97,5 +98,52 @@ describe('validFolderName', () => {
     expect(validFolderName('a/b')).toBe(false);
     expect(validFolderName('..')).toBe(false);
     expect(validFolderName('')).toBe(false);
+  });
+});
+
+describe('manual folder binds', () => {
+  it('pairs a bound folder with its chosen project even when titles differ', () => {
+    const r = matchFoldersToProjects(['Inbox/backlog.md'], [{ id: 'p1', title: 'Alpha' }], [], {
+      'Inbox/backlog.md': 'p1',
+    });
+    expect(r.matched).toEqual([{ folder: 'Inbox/backlog.md', projectId: 'p1' }]);
+    expect(r.projectsWithoutFolder).toEqual([]);
+  });
+
+  it('a manual bind wins over a same-title match', () => {
+    const r = matchFoldersToProjects(
+      ['Alpha', 'Other'],
+      [{ id: 'p1', title: 'Alpha' }, { id: 'p2', title: 'Other' }],
+      [],
+      { Alpha: 'p2' },
+    );
+    expect(r.matched).toEqual(expect.arrayContaining([
+      { folder: 'Alpha', projectId: 'p2' },
+    ]));
+    expect(r.matched.find((m) => m.projectId === 'p1')).toBeUndefined();
+  });
+
+  it('ignores a bind whose folder or project no longer exists', () => {
+    const r = matchFoldersToProjects([], [{ id: 'p1', title: 'Alpha' }], [], { gone: 'p1' });
+    expect(r.matched).toEqual([]);
+    expect(r.projectsWithoutFolder).toEqual([{ id: 'p1', title: 'Alpha' }]);
+  });
+
+  it('a bind does not apply to an excluded folder', () => {
+    const r = matchFoldersToProjects(['X'], [{ id: 'p1', title: 'Alpha' }], ['X'], { X: 'p1' });
+    expect(r.matched).toEqual([]);
+  });
+});
+
+describe('validBindFile', () => {
+  it('accepts a relative markdown file', () => {
+    expect(validBindFile('Inbox/backlog.md')).toBe(true);
+  });
+
+  it('rejects absolute paths, traversal and non-markdown files', () => {
+    expect(validBindFile('/etc/x.md')).toBe(false);
+    expect(validBindFile('../x.md')).toBe(false);
+    expect(validBindFile('Inbox/notes.txt')).toBe(false);
+    expect(validBindFile('')).toBe(false);
   });
 });
