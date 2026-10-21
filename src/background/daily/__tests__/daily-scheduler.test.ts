@@ -11,7 +11,7 @@ import { DEFAULT_DAILY_NOTE_CFG } from '../daily-note';
 jest.mock('../daily-runner', () => ({ runDailyNoteDryRun: jest.fn().mockResolvedValue(undefined) }));
 
 const mockedRun = runDailyNoteDryRun as jest.MockedFunction<typeof runDailyNoteDryRun>;
-const cfg = { ...DEFAULT_DAILY_NOTE_CFG, enabled: true, vaultRoot: '/vault' };
+const cfg = { ...DEFAULT_DAILY_NOTE_CFG, enabled: true, vaultPath: '/vault' };
 const deps = { getBaseline: () => ({}), saveBaseline: jest.fn() };
 
 beforeEach(() => {

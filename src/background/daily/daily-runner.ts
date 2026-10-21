@@ -34,12 +34,12 @@ export const runDailyNoteDryRun = async (
   now: Date = new Date(),
 ): Promise<void> => {
   if (!cfg.enabled) return;
-  if (!cfg.vaultRoot) {
+  if (!cfg.vaultPath) {
     log.error('Daily notes enabled but no vault root is set');
     return;
   }
 
-  const notePath = resolveInsideVault(cfg.vaultRoot, dailyNoteRelativePath(cfg, now));
+  const notePath = resolveInsideVault(cfg.vaultPath, dailyNoteRelativePath(cfg, now));
 
   const [tags, tasks] = await Promise.all([PluginAPI.getAllTags(), PluginAPI.getTasks()]);
   const plannedIds = new Set(plannedTaskIdsForToday(tags));

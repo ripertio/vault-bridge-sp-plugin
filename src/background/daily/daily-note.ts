@@ -14,7 +14,7 @@ export interface DailyNoteCfg {
   // Include Inbox tasks in the daily note.
   includeInbox: boolean;
   // Absolute vault root. Every daily-note path must resolve inside it.
-  vaultRoot: string;
+  vaultPath: string;
   // Delete the SP task when its plugin-written line is removed from the note.
   // Off by default; deletes only run in write mode.
   deleteRemoved: boolean;
@@ -26,7 +26,7 @@ export const DEFAULT_DAILY_NOTE_CFG: DailyNoteCfg = {
   folder: 'Daily',
   filenameFormat: 'YYYY-MM-DD',
   includeInbox: true,
-  vaultRoot: '',
+  vaultPath: '',
   deleteRemoved: false,
 };
 
@@ -112,18 +112,23 @@ export const ensureToDosSection = (lines: string[]): string[] => {
 };
 
 /** Merge stored (possibly partial) daily settings over the safe defaults. */
-export const resolveDailyNoteCfg = (stored?: Partial<DailyNoteCfg>): DailyNoteCfg => ({
-  ...DEFAULT_DAILY_NOTE_CFG,
-  ...(stored ?? {}),
-});
+export const resolveDailyNoteCfg = (stored?: Partial<DailyNoteCfg> & { vaultRoot?: string }): DailyNoteCfg => {
+  // Settings saved before the rename stored the vault as `vaultRoot`.
+  const { vaultRoot, ...rest } = stored ?? {};
+  return {
+    ...DEFAULT_DAILY_NOTE_CFG,
+    ...(vaultRoot && !rest.vaultPath ? { vaultPath: vaultRoot } : {}),
+    ...rest,
+  };
+};
 
 /**
  * Join a vault-relative path onto the absolute vault root, rejecting any result
  * outside it. Lexical check only; the caller is responsible for resolving
  * symlinks when a Node call is available.
  */
-export const resolveInsideVault = (vaultRoot: string, relative: string): string => {
-  const root = vaultRoot.replace(/\\/g, '/').replace(/\/+$/, '');
+export const resolveInsideVault = (vaultPath: string, relative: string): string => {
+  const root = vaultPath.replace(/\\/g, '/').replace(/\/+$/, '');
   if (!root.startsWith('/') && !/^[a-zA-Z]:\//.test(root)) {
     throw new Error('[sync-md] Vault root must be an absolute path');
   }

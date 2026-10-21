@@ -139,3 +139,15 @@ describe('resolveInsideVault', () => {
     expect(() => resolveInsideVault('/vault', '/etc/passwd')).toThrow();
   });
 });
+
+describe('resolveDailyNoteCfg vault migration', () => {
+  it('reads a legacy vaultRoot as vaultPath', () => {
+    const cfg = resolveDailyNoteCfg({ enabled: true, vaultRoot: '/legacy' } as any);
+    expect(cfg.vaultPath).toBe('/legacy');
+  });
+
+  it('prefers vaultPath when both exist', () => {
+    const cfg = resolveDailyNoteCfg({ vaultPath: '/new', vaultRoot: '/legacy' } as any);
+    expect(cfg.vaultPath).toBe('/new');
+  });
+});

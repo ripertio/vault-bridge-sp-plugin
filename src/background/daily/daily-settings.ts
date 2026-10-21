@@ -13,14 +13,14 @@ const isAbsolute = (p: string): boolean => p.startsWith('/') || /^[a-zA-Z]:[\\/]
  */
 export const validateDailySettings = (input: Partial<DailyNoteCfg>): DailySettingsResult => {
   const cfg: DailyNoteCfg = { ...DEFAULT_DAILY_NOTE_CFG, ...input };
-  const vaultRoot = (cfg.vaultRoot ?? '').trim().replace(/[\\/]+$/, '');
+  const vaultPath = (cfg.vaultPath ?? '').trim().replace(/[\\/]+$/, '');
   const folder = (cfg.folder ?? '').trim();
   const format = (cfg.filenameFormat ?? '').trim();
 
   if (cfg.enabled) {
-    if (!vaultRoot) return { ok: false, error: 'Vault folder is required.' };
-    if (!isAbsolute(vaultRoot)) return { ok: false, error: 'Vault folder must be an absolute path.' };
-    if (vaultRoot.split(/[\\/]/).includes('..')) return { ok: false, error: 'Vault folder must not contain "..".' };
+    if (!vaultPath) return { ok: false, error: 'Vault path is required.' };
+    if (!isAbsolute(vaultPath)) return { ok: false, error: 'Vault path must be an absolute path.' };
+    if (vaultPath.split(/[\\/]/).includes('..')) return { ok: false, error: 'Vault path must not contain "..".' };
   }
   if (folder && folder.split(/[\\/]/).some((s) => s === '..')) {
     return { ok: false, error: 'Daily folder must stay inside the vault.' };
@@ -30,12 +30,12 @@ export const validateDailySettings = (input: Partial<DailyNoteCfg>): DailySettin
   }
   if (!format) return { ok: false, error: 'Filename format is required.' };
 
-  const normalized: DailyNoteCfg = { ...cfg, vaultRoot, folder, filenameFormat: format };
+  const normalized: DailyNoteCfg = { ...cfg, vaultPath, folder, filenameFormat: format };
 
   // Build a sample path to run the same checks the runner will run.
   try {
     const sample = dailyNoteRelativePath(normalized, new Date());
-    if (cfg.enabled) resolveInsideVault(vaultRoot, sample);
+    if (cfg.enabled) resolveInsideVault(vaultPath, sample);
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : 'Invalid daily note path.' };
   }

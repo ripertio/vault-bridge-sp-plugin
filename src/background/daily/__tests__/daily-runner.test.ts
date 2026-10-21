@@ -14,7 +14,7 @@ const { log } = jest.requireMock('../../../shared/logger') as { log: { log: jest
 const NOW = new Date(2026, 9, 21);
 const deps = { getBaseline: () => ({}), saveBaseline: jest.fn() };
 const ROOT = '/vault';
-const cfg = { ...DEFAULT_DAILY_NOTE_CFG, enabled: true, vaultRoot: ROOT };
+const cfg = { ...DEFAULT_DAILY_NOTE_CFG, enabled: true, vaultPath: ROOT };
 
 const setSp = (taskIds: string[]) => {
   (global as any).PluginAPI = {
@@ -42,7 +42,7 @@ describe('runDailyNoteDryRun', () => {
 
   it('refuses to run without a vault root', async () => {
     setSp(['p1']);
-    await runDailyNoteDryRun({ ...cfg, vaultRoot: '' }, deps, NOW);
+    await runDailyNoteDryRun({ ...cfg, vaultPath: '' }, deps, NOW);
     expect(log.error).toHaveBeenCalled();
     expect(mockedRead).not.toHaveBeenCalled();
   });

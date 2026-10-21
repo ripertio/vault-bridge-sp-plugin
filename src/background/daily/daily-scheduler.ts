@@ -35,8 +35,8 @@ export const startDailyNoteWatcher = (
 ): void => {
   stopDailyNoteWatcher();
   const cfg = getCfg();
-  if (!cfg.enabled || !cfg.vaultRoot) return;
-  const path = resolveInsideVault(cfg.vaultRoot, dailyNoteRelativePath(cfg, new Date()));
+  if (!cfg.enabled || !cfg.vaultPath) return;
+  const path = resolveInsideVault(cfg.vaultPath, dailyNoteRelativePath(cfg, new Date()));
   stopWatcher = watch(path, () => scheduleDailyNoteRun(getCfg, deps));
 };
 

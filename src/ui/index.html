@@ -131,6 +131,14 @@
         <p class="file-hint">Writes today's note with tasks planned for today. Everything is OFF until you enable it.</p>
         <form id="dailyForm">
           <div class="form-group">
+            <label for="dailyPath">Vault path</label>
+            <div class="file-input-row">
+              <input type="text" id="dailyPath" placeholder="/path/to/your/vault" />
+              <button type="button" class="btn btn-outline" id="dailyPathBrowse">Browse…</button>
+            </div>
+            <span class="file-hint">Absolute path to your Obsidian vault. Every daily note stays inside it.</span>
+          </div>
+          <div class="form-group">
             <label><input type="checkbox" id="dailyEnabled" /> Enable daily notes</label>
           </div>
           <div class="form-group">
@@ -138,14 +146,6 @@
           </div>
           <div class="form-group">
             <label><input type="checkbox" id="dailyDelete" /> Delete the SP task when its line is removed from the note</label>
-          </div>
-          <div class="form-group">
-            <label for="dailyVault">Vault folder</label>
-            <div class="file-input-row">
-              <input type="text" id="dailyVault" placeholder="/path/to/your/vault" />
-              <button type="button" class="btn btn-outline" id="dailyVaultBrowse">Browse…</button>
-            </div>
-            <span class="file-hint">Absolute path. Every daily note must stay inside this folder.</span>
           </div>
           <div class="form-group">
             <label for="dailyFolder">Daily notes folder (inside the vault)</label>
@@ -853,7 +853,7 @@
       }
 
       document.getElementById('browseBtn').addEventListener('click', fbOpen);
-      document.getElementById('dailyVaultBrowse').addEventListener('click', () => fbOpenFolder('dailyVault'));
+      document.getElementById('dailyPathBrowse').addEventListener('click', () => fbOpenFolder('dailyPath'));
       document.getElementById('fbUseFolderBtn').addEventListener('click', () => {
         if (fbTarget && fbCurrentDir) {
           document.getElementById(fbTarget).value = fbCurrentDir;
@@ -902,7 +902,7 @@
         document.getElementById('dailyEnabled').checked = !!d.enabled;
         document.getElementById('dailyWrite').checked = d.dryRun === false;
         document.getElementById('dailyDelete').checked = !!d.deleteRemoved;
-        document.getElementById('dailyVault').value = d.vaultRoot || '';
+        document.getElementById('dailyPath').value = d.vaultPath || '';
         document.getElementById('dailyFolder').value = d.folder ?? DAILY_DEFAULTS.folder;
         document.getElementById('dailyFormat').value = d.filenameFormat || DAILY_DEFAULTS.filenameFormat;
         updateDailyPreview();
@@ -927,7 +927,7 @@
           enabled: document.getElementById('dailyEnabled').checked,
           dryRun: !document.getElementById('dailyWrite').checked,
           deleteRemoved: document.getElementById('dailyDelete').checked,
-          vaultRoot: document.getElementById('dailyVault').value.trim(),
+          vaultPath: document.getElementById('dailyPath').value.trim(),
           folder: document.getElementById('dailyFolder').value.trim(),
           filenameFormat: document.getElementById('dailyFormat').value.trim(),
         };
