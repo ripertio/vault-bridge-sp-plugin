@@ -13,6 +13,7 @@ import { validateProjectsDirCfg, resolveProjectsDirCfg } from './projects/projec
 import { computeEffectiveBindings } from './projects/effective-bindings';
 import { listSubfolders, renameSubfolder } from './helper/file-utils';
 import { planRenames } from './projects/rename';
+import { effectiveVaultPath, validateVaultPath } from './vault';
 import { folderListChanged } from './projects/folder-poll';
 import { lazySetInterval } from './helper/lazy-set-interval';
 import { spToMd } from './sync/sp-to-md';
@@ -232,7 +233,7 @@ const maybeCheckForUpdate = async (isStartup = false): Promise<void> => {
 // auto mode is on. A failed folder scan starts nothing (see effective-bindings.ts).
 const startBindings = async (): Promise<void> => {
   const projectsDir = resolveProjectsDirCfg(currentConfig.projectsDir);
-  const vaultPath = currentConfig.daily?.vaultPath ?? '';
+  const vaultPath = effectiveVaultPath(currentConfig);
 
   // Auto mode: create what is missing on either side. Write mode follows the daily
   // setting (one write switch for the plugin); dry-run only logs.
@@ -241,7 +242,7 @@ const startBindings = async (): Promise<void> => {
       const absDir = `${vaultPath.replace(/[\\/]+$/, '')}/${projectsDir.projectsDir}`;
       const folders = await listSubfolders(absDir);
       const projects = (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title }));
-      const writeMode = !resolveDailyNoteCfg(currentConfig.daily).dryRun;
+      const writeMode = !dailyCfg().dryRun;
       const links = currentConfig._projectLinks ?? {};
 
       // Renames first, so the reconcile below sees the already-renamed folders.
@@ -270,7 +271,7 @@ const startBindings = async (): Promise<void> => {
         currentConfig = { ...currentConfig, _projectLinks: nextLinks };
         persistConfig();
       }
-      await runProjectsReconcile(planReconcile(match), absDir, resolveDailyNoteCfg(currentConfig.daily).dryRun, {
+      await runProjectsReconcile(planReconcile(match), absDir, dailyCfg().dryRun, {
         createProject: createSpProject,
         writeBacklog: async (binding) => {
           await spToMd(binding);
@@ -327,7 +328,7 @@ const startFolderPoll = (): void => {
   stopFolderPoll = null;
   lastFolderList = null;
   const cfg = resolveProjectsDirCfg(currentConfig.projectsDir);
-  const vaultPath = currentConfig.daily?.vaultPath ?? '';
+  const vaultPath = effectiveVaultPath(currentConfig);
   if (!cfg.enabled || !vaultPath) return;
   const absDir = `${vaultPath.replace(/[\\/]+$/, '')}/${cfg.projectsDir}`;
   stopFolderPoll = lazySetInterval(async () => {
@@ -373,6 +374,13 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
     log.error('[sync-md-multi] Failed to apply config from UI:', err);
   }
 };
+
+// Daily settings with the shared vault path applied, so the daily code never reads
+// a second copy of the vault path.
+const dailyCfg = () => ({
+  ...resolveDailyNoteCfg(currentConfig.daily),
+  vaultPath: effectiveVaultPath(currentConfig),
+});
 
 // Baseline storage for the daily-note sync (device-local, saved with the config).
 const dailyDeps = () => ({
@@ -542,8 +550,8 @@ const dailyDeps = () => ({
   }
 
   // Daily notes: dry-run only, and only when the user has enabled it.
-  startDailyNoteWatcher(() => resolveDailyNoteCfg(currentConfig.daily), dailyDeps(), startFileWatcher);
-  void runDailyNoteDryRun(resolveDailyNoteCfg(currentConfig.daily), dailyDeps()).catch((err) =>
+  startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), startFileWatcher);
+  void runDailyNoteDryRun(dailyCfg(), dailyDeps()).catch((err) =>
     log.error('daily dry-run failed', err),
   );
 
@@ -588,13 +596,21 @@ const dailyDeps = () => ({
         startFolderPoll();
         return { success: true, projectsDir: result.cfg };
       }
+      if (type === 'saveVaultPath') {
+        const result = validateVaultPath(message.path);
+        if (!result.ok) return { success: false, error: result.error };
+        currentConfig = { ...currentConfig, vaultPath: result.path };
+        persistConfig();
+        startFolderPoll();
+        return { success: true, path: result.path };
+      }
       if (type === 'saveDailySettings') {
         const result = validateDailySettings(message.daily ?? {});
         if (!result.ok) return { success: false, error: result.error };
         currentConfig = { ...currentConfig, daily: result.cfg };
         persistConfig();
         // Restart the watcher so it follows the new folder or filename format.
-        startDailyNoteWatcher(() => resolveDailyNoteCfg(currentConfig.daily), dailyDeps(), startFileWatcher);
+        startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), startFileWatcher);
         return { success: true, daily: result.cfg };
       }
       if (type === 'getProjects') {
@@ -656,7 +672,7 @@ const dailyDeps = () => ({
   // Daily notes: re-run after task edits (debounced). Gated by daily.enabled in
   // the runner, so this is a no-op while the feature is off.
   PluginAPI.registerHook('taskUpdate' as any, () =>
-    scheduleDailyNoteRun(() => resolveDailyNoteCfg(currentConfig.daily), dailyDeps()),
+    scheduleDailyNoteRun(() => dailyCfg(), dailyDeps()),
   );
 
   // ── Project list cache (non-critical → fire-and-forget) ───────────────────

@@ -35,6 +35,8 @@ export interface LocalUserCfgV2 {
   _lastUpdateCheck?: string;
   _latestVersion?: string;
   _latestUrl?: string;
+  // Vault path shared by daily notes and project folders (absolute).
+  vaultPath?: string;
   // Daily-note settings. Optional so existing configs stay valid; absent means
   // the defaults in daily/daily-note.ts (feature OFF, dry-run ON).
   daily?: Partial<DailyNoteCfg>;

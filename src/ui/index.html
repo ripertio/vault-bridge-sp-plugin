@@ -126,18 +126,28 @@
         </form>
       </div>
 
+      <div class="card" id="vaultCard">
+        <h3>Vault</h3>
+        <p class="file-hint">The Obsidian vault used by Daily Notes and Projects. Every file the plugin reads or writes stays inside it.</p>
+        <form id="vaultForm">
+          <div class="form-group">
+            <label for="vaultPath">Vault path</label>
+            <div class="file-input-row">
+              <input type="text" id="vaultPath" placeholder="/path/to/your/vault" />
+              <button type="button" class="btn btn-outline" id="vaultPathBrowse">Browse…</button>
+            </div>
+            <span class="file-hint">Absolute path to your Obsidian vault.</span>
+          </div>
+          <div class="actions">
+            <button type="submit" class="btn btn-primary" id="vaultSaveBtn">Save Vault</button>
+          </div>
+        </form>
+      </div>
+
       <div class="card" id="dailyCard">
         <h3>Daily Notes</h3>
         <p class="file-hint">Writes today's note with tasks planned for today. Everything is OFF until you enable it.</p>
         <form id="dailyForm">
-          <div class="form-group">
-            <label for="dailyPath">Vault path</label>
-            <div class="file-input-row">
-              <input type="text" id="dailyPath" placeholder="/path/to/your/vault" />
-              <button type="button" class="btn btn-outline" id="dailyPathBrowse">Browse…</button>
-            </div>
-            <span class="file-hint">Absolute path to your Obsidian vault. Every daily note stays inside it.</span>
-          </div>
           <div class="form-group">
             <label><input type="checkbox" id="dailyEnabled" /> Enable daily notes</label>
           </div>
@@ -359,6 +369,7 @@
             projects = data._cachedProjects || [];
             loadDailyForm(data.daily || {});
             loadProjectsForm(data.projectsDir || {});
+            document.getElementById('vaultPath').value = data.vaultPath || (data.daily && data.daily.vaultPath) || '';
           }
 
           // Load the project dropdown (with direct API call + cache fallback + retry)
@@ -878,12 +889,12 @@
       }
 
       document.getElementById('browseBtn').addEventListener('click', fbOpen);
-      document.getElementById('dailyPathBrowse').addEventListener('click', () => fbOpenFolder('dailyPath'));
+      document.getElementById('vaultPathBrowse').addEventListener('click', () => fbOpenFolder('vaultPath'));
       document.getElementById('fbUseFolderBtn').addEventListener('click', () => {
         if (fbTarget && fbCurrentDir) {
           // The projects folder is stored relative to the vault path.
           if (fbTarget === 'projectsDir') {
-            const vault = document.getElementById('dailyPath').value.trim().replace(/[\\/]+$/, '');
+            const vault = document.getElementById('vaultPath').value.trim().replace(/[\\/]+$/, '');
             const rel = vault && (fbCurrentDir === vault || fbCurrentDir.startsWith(vault + '/'))
               ? fbCurrentDir.slice(vault.length).replace(/^\/+/, '')
               : null;
@@ -932,6 +943,19 @@
       });
 
       // ── Init ────────────────────────────────────────────────────────────────
+      // ── Vault (shared by Daily Notes and Projects) ───────────────────────────
+      document.getElementById('vaultForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        try {
+          const res = await sendMessage({ type: 'saveVaultPath', path: document.getElementById('vaultPath').value });
+          if (!res || !res.success) throw new Error((res && res.error) || 'no response from background');
+          document.getElementById('vaultPath').value = res.path;
+          showStatus('Vault path saved', 'success');
+        } catch (err) {
+          showStatus('Error saving vault path: ' + (err.message || err), 'error');
+        }
+      });
+
       // ── Daily Notes ─────────────────────────────────────────────────────────
       // Defaults mirror DEFAULT_DAILY_NOTE_CFG in the background (all OFF).
       const DAILY_DEFAULTS = { folder: 'Daily', filenameFormat: 'YYYY-MM-DD' };
@@ -940,7 +964,7 @@
         document.getElementById('dailyEnabled').checked = !!d.enabled;
         document.getElementById('dailyWrite').checked = d.dryRun === false;
         document.getElementById('dailyDelete').checked = !!d.deleteRemoved;
-        document.getElementById('dailyPath').value = d.vaultPath || '';
+
         document.getElementById('dailyFolder').value = d.folder ?? DAILY_DEFAULTS.folder;
         document.getElementById('dailyFormat').value = d.filenameFormat || DAILY_DEFAULTS.filenameFormat;
         updateDailyPreview();
@@ -965,7 +989,6 @@
           enabled: document.getElementById('dailyEnabled').checked,
           dryRun: !document.getElementById('dailyWrite').checked,
           deleteRemoved: document.getElementById('dailyDelete').checked,
-          vaultPath: document.getElementById('dailyPath').value.trim(),
           folder: document.getElementById('dailyFolder').value.trim(),
           filenameFormat: document.getElementById('dailyFormat').value.trim(),
         };
@@ -987,7 +1010,7 @@
 
       document.getElementById('projectsDirBrowse').addEventListener('click', () => {
         // The projects folder is relative to the vault path, so the browser starts there.
-        const vault = document.getElementById('dailyPath').value.trim();
+        const vault = document.getElementById('vaultPath').value.trim();
         fbOpenFolder('projectsDir', vault);
       });
 
