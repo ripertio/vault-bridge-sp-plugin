@@ -60,3 +60,9 @@ describe('validateDailySettings', () => {
     expect(r).toMatchObject({ ok: true, cfg: { enabled: false, dryRun: true, deleteRemoved: false } });
   });
 });
+
+describe('daily folder from the picker', () => {
+  it('accepts an empty folder (the vault root)', () => {
+    expect(validateDailySettings({ enabled: true, vaultPath: '/Users/me/Vault', folder: '', filenameFormat: 'YYYY-MM-DD' }).ok).toBe(true);
+  });
+});

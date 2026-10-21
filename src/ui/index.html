@@ -159,7 +159,10 @@
           </div>
           <div class="form-group">
             <label for="dailyFolder">Daily notes folder (inside the vault)</label>
-            <input type="text" id="dailyFolder" placeholder="Daily" />
+            <div class="file-input-row">
+              <input type="text" id="dailyFolder" placeholder="Daily" />
+              <button type="button" class="btn btn-outline" id="dailyFolderBrowse">Browse…</button>
+            </div>
           </div>
           <div class="form-group">
             <label for="dailyFormat">Filename format</label>
@@ -893,7 +896,8 @@
       document.getElementById('fbUseFolderBtn').addEventListener('click', () => {
         if (fbTarget && fbCurrentDir) {
           // The projects folder is stored relative to the vault path.
-          if (fbTarget === 'projectsDir') {
+          // Vault-relative folder fields (projects folder, daily folder).
+          if (fbTarget === 'projectsDir' || fbTarget === 'dailyFolder') {
             const vault = document.getElementById('vaultPath').value.trim().replace(/[\\/]+$/, '');
             const rel = vault && (fbCurrentDir === vault || fbCurrentDir.startsWith(vault + '/'))
               ? fbCurrentDir.slice(vault.length).replace(/^\/+/, '')
@@ -902,7 +906,8 @@
               showStatus('Choose a folder inside the vault path.', 'error');
               return;
             }
-            document.getElementById(fbTarget).value = rel || '.';
+            // Empty means the vault root itself (for the daily folder this is valid).
+            document.getElementById(fbTarget).value = rel;
           } else {
             document.getElementById(fbTarget).value = fbCurrentDir;
             updateDailyPreview();
@@ -1007,6 +1012,11 @@
         document.getElementById('projectsDir').value = p.projectsDir ?? 'Projects';
         document.getElementById('projectsExcluded').value = (p.excluded || []).join('\n');
       }
+
+      document.getElementById('dailyFolderBrowse').addEventListener('click', () => {
+        const vault = document.getElementById('vaultPath').value.trim();
+        fbOpenFolder('dailyFolder', vault);
+      });
 
       document.getElementById('projectsDirBrowse').addEventListener('click', () => {
         // The projects folder is relative to the vault path, so the browser starts there.
