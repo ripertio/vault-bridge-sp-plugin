@@ -1,0 +1,59 @@
+import type { SyncBindingCfg } from '../local-config';
+import type { ReconcilePlan } from './reconcile';
+import { log } from '../../shared/logger';
+
+export interface ReconcileDeps {
+  // Create an SP project for a folder name, returns the new project id.
+  createProject: (title: string) => Promise<string>;
+  // Write the project's tasks to its backlog.md (creates the folder when needed).
+  writeBacklog: (binding: SyncBindingCfg) => Promise<void>;
+}
+
+/**
+ * Carry out the reconcile plan. Write mode only: in dry-run it logs the intent and
+ * changes nothing. A failure on one item is logged and does not stop the others.
+ * Returns the number of items created.
+ */
+export const runProjectsReconcile = async (
+  plan: ReconcilePlan,
+  projectsDirAbs: string,
+  dryRun: boolean,
+  deps: ReconcileDeps,
+): Promise<number> => {
+  let created = 0;
+  for (const folder of plan.projectsToCreate) {
+    if (dryRun) {
+      log.log(`would create SP project "${folder}"`);
+      continue;
+    }
+    try {
+      const id = await deps.createProject(folder);
+      log.log(`created SP project "${folder}" (${id})`);
+      created++;
+    } catch (err) {
+      log.error(`could not create SP project "${folder}"`, err);
+    }
+  }
+
+  for (const project of plan.foldersToCreate) {
+    const binding: SyncBindingCfg = {
+      id: `auto-${project.id}`,
+      filePath: `${projectsDirAbs.replace(/[\\/]+$/, '')}/${project.title}/backlog.md`,
+      projectId: project.id,
+      enabled: true,
+      projectTitle: project.title,
+    };
+    if (dryRun) {
+      log.log(`would create folder + backlog.md for "${project.title}"`);
+      continue;
+    }
+    try {
+      await deps.writeBacklog(binding);
+      log.log(`created folder + backlog.md for "${project.title}"`);
+      created++;
+    } catch (err) {
+      log.error(`could not create backlog for "${project.title}"`, err);
+    }
+  }
+  return created;
+};

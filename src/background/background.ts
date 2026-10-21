@@ -12,6 +12,11 @@ import { validateDailySettings } from './daily/daily-settings';
 import { validateProjectsDirCfg, resolveProjectsDirCfg } from './projects/project-dir';
 import { computeEffectiveBindings } from './projects/effective-bindings';
 import { listSubfolders } from './helper/file-utils';
+import { spToMd } from './sync/sp-to-md';
+import { createSpProject } from './sync/missing-resource';
+import { planReconcile } from './projects/reconcile';
+import { runProjectsReconcile } from './projects/reconcile-run';
+import { matchFoldersToProjects } from './projects/project-dir';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
 declare const __PLUGIN_VERSION__: string;
@@ -224,10 +229,31 @@ const maybeCheckForUpdate = async (isStartup = false): Promise<void> => {
 // auto mode is on. A failed folder scan starts nothing (see effective-bindings.ts).
 const startBindings = async (): Promise<void> => {
   const projectsDir = resolveProjectsDirCfg(currentConfig.projectsDir);
+  const vaultPath = currentConfig.daily?.vaultPath ?? '';
+
+  // Auto mode: create what is missing on either side. Write mode follows the daily
+  // setting (one write switch for the plugin); dry-run only logs.
+  if (projectsDir.enabled && vaultPath) {
+    try {
+      const absDir = `${vaultPath.replace(/[\\/]+$/, '')}/${projectsDir.projectsDir}`;
+      const folders = await listSubfolders(absDir);
+      const projects = (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title }));
+      const match = matchFoldersToProjects(folders, projects, projectsDir.excluded);
+      await runProjectsReconcile(planReconcile(match), absDir, resolveDailyNoteCfg(currentConfig.daily).dryRun, {
+        createProject: createSpProject,
+        writeBacklog: async (binding) => {
+          await spToMd(binding);
+        },
+      });
+    } catch (err) {
+      log.error('projects reconcile failed', err);
+    }
+  }
+
   const result = await computeEffectiveBindings(
     currentConfig.bindings,
     projectsDir,
-    currentConfig.daily?.vaultPath ?? '',
+    vaultPath,
     {
       listFolders: listSubfolders,
       getProjects: async () =>
