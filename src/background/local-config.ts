@@ -37,6 +37,9 @@ export interface LocalUserCfgV2 {
   // Daily-note settings. Optional so existing configs stay valid; absent means
   // the defaults in daily/daily-note.ts (feature OFF, dry-run ON).
   daily?: Partial<DailyNoteCfg>;
+  // Last state the plugin wrote for each daily-note task (id → done/title). Used
+  // to tell which side changed. Device-local, like _lastSynced.
+  _dailyBaseline?: Record<string, { isDone: boolean; title: string }>;
 }
 
 // Legacy interface for migration

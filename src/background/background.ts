@@ -5,7 +5,8 @@ import { fetchLatestRelease, isNewerVersion } from './update-check';
 import type { UpdateInfo } from './update-check';
 import { log } from '../shared/logger';
 import { runDailyNoteDryRun } from './daily/daily-runner';
-import { scheduleDailyNoteRun, cancelDailyNoteRun } from './daily/daily-scheduler';
+import { scheduleDailyNoteRun, cancelDailyNoteRun, startDailyNoteWatcher, stopDailyNoteWatcher } from './daily/daily-scheduler';
+import { startFileWatcher } from './sync/file-watcher';
 import { resolveDailyNoteCfg } from './daily/daily-note';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
@@ -230,6 +231,7 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
       _latestVersion: currentConfig._latestVersion,
       _latestUrl: currentConfig._latestUrl,
       daily: currentConfig.daily,
+      _dailyBaseline: currentConfig._dailyBaseline,
     };
     persistConfig();
     if (bindingsChanged) {
@@ -241,6 +243,15 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
     log.error('[sync-md-multi] Failed to apply config from UI:', err);
   }
 };
+
+// Baseline storage for the daily-note sync (device-local, saved with the config).
+const dailyDeps = () => ({
+  getBaseline: () => currentConfig._dailyBaseline ?? {},
+  saveBaseline: (baseline: NonNullable<LocalUserCfgV2['_dailyBaseline']>) => {
+    currentConfig = { ...currentConfig, _dailyBaseline: baseline };
+    persistConfig();
+  },
+});
 
 (async () => {
   // ── UI registration (synchronous, before any await) ──────────────────────
@@ -401,7 +412,8 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
   }
 
   // Daily notes: dry-run only, and only when the user has enabled it.
-  void runDailyNoteDryRun(resolveDailyNoteCfg(currentConfig.daily)).catch((err) =>
+  startDailyNoteWatcher(() => resolveDailyNoteCfg(currentConfig.daily), dailyDeps(), startFileWatcher);
+  void runDailyNoteDryRun(resolveDailyNoteCfg(currentConfig.daily), dailyDeps()).catch((err) =>
     log.error('daily dry-run failed', err),
   );
 
@@ -472,6 +484,7 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
       clearInterval(updateCheckId);
       if (persistConfigTimer) clearTimeout(persistConfigTimer);
       cancelDailyNoteRun();
+      stopDailyNoteWatcher();
       shutdownSyncRegistry();
       log.log('[sync-md-multi] onUnload: timers + sessions torn down');
     });
@@ -485,7 +498,9 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
 
   // Daily notes: re-run after task edits (debounced). Gated by daily.enabled in
   // the runner, so this is a no-op while the feature is off.
-  PluginAPI.registerHook('taskUpdate' as any, () => scheduleDailyNoteRun(() => resolveDailyNoteCfg(currentConfig.daily)));
+  PluginAPI.registerHook('taskUpdate' as any, () =>
+    scheduleDailyNoteRun(() => resolveDailyNoteCfg(currentConfig.daily), dailyDeps()),
+  );
 
   // ── Project list cache (non-critical → fire-and-forget) ───────────────────
   // Only populates the iframe dropdown; must NOT block the detection wiring
