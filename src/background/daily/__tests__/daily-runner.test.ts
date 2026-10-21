@@ -204,6 +204,63 @@ describe('runDailyNoteDryRun', () => {
     expect(mockedWrite).not.toHaveBeenCalled();
   });
 
+  it('does not delete in SP in dry-run, even when a line was removed', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n');
+    setSp([]);
+    const deleteTask = jest.fn();
+    const openDialog = jest.fn();
+    (global as any).PluginAPI = { ...(global as any).PluginAPI, deleteTask, openDialog };
+    const withBaseline = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      saveBaseline: jest.fn(),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: true }, withBaseline, NOW);
+    expect(openDialog).not.toHaveBeenCalled();
+    expect(deleteTask).not.toHaveBeenCalled();
+  });
+
+  it('asks before deleting and deletes only when the user confirms', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n');
+    setSp([]);
+    const deleteTask = jest.fn().mockResolvedValue(undefined);
+    const openDialog = jest.fn().mockResolvedValue(undefined);
+    (global as any).PluginAPI = { ...(global as any).PluginAPI, deleteTask, openDialog };
+    const withBaseline = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      saveBaseline: jest.fn(),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, withBaseline, NOW);
+    expect(openDialog).toHaveBeenCalledTimes(1);
+    // The dialog itself does not delete; only the warn button's onClick does.
+    expect(deleteTask).not.toHaveBeenCalled();
+    const buttons = openDialog.mock.calls[0][0].buttons;
+    await buttons[0].onClick();
+    expect(deleteTask).toHaveBeenCalledWith('p1');
+  });
+
+  it('drops a removed ID from the baseline after the prompt, even if kept', async () => {
+    // The note gains a new task so the run writes and saves the baseline.
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] Neuer Task');
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: [] }]),
+      getTasks: jest.fn().mockResolvedValue([]),
+      addTask: jest.fn().mockResolvedValue('NEW2'),
+    };
+    (global as any).PluginAPI = {
+      ...(global as any).PluginAPI,
+      deleteTask: jest.fn(),
+      openDialog: jest.fn().mockResolvedValue(undefined),
+    };
+    const saveBaseline = jest.fn();
+    const withBaseline = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      saveBaseline,
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, withBaseline, NOW);
+    const saved = saveBaseline.mock.calls.at(-1)?.[0];
+    expect(saved).not.toHaveProperty('p1');
+  });
+
   it('never mutates SP tasks', async () => {
     setSp(['p1', 'i1']);
     await runDailyNoteDryRun(cfg, deps, NOW);

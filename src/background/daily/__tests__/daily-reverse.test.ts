@@ -1,4 +1,4 @@
-import { diffNoteAgainstBaseline, parseNoteTaskLine } from '../daily-reverse';
+import { diffNoteAgainstBaseline, parseNoteTaskLine, findRemovedBaselineIds } from '../daily-reverse';
 
 const base = { p1: { isDone: false, title: 'Project task' } };
 
@@ -44,5 +44,21 @@ describe('diffNoteAgainstBaseline', () => {
 
   it('reports nothing when the note matches the baseline', () => {
     expect(diffNoteAgainstBaseline(['- [ ] <!--p1--> Project task'], base, { p1: false })).toEqual([]);
+  });
+});
+
+describe('findRemovedBaselineIds', () => {
+  it('returns baseline IDs whose line is gone from the note', () => {
+    const b = { p1: { isDone: false, title: 'a' }, p2: { isDone: false, title: 'b' } };
+    expect(findRemovedBaselineIds(['- [ ] <!--p1--> a'], b)).toEqual(['p2']);
+  });
+
+  it('never proposes IDs that the plugin did not write', () => {
+    expect(findRemovedBaselineIds(['- [ ] <!--foreign--> x'], {})).toEqual([]);
+  });
+
+  it('returns nothing when all baseline lines are present', () => {
+    const b = { p1: { isDone: false, title: 'a' } };
+    expect(findRemovedBaselineIds(['- [x] <!--p1--> a'], b)).toEqual([]);
   });
 });

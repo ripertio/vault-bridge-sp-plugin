@@ -59,3 +59,17 @@ export const diffNoteAgainstBaseline = (
   }
   return changes;
 };
+
+/**
+ * Baseline tasks whose line was removed from the note. A removed line is only a
+ * *candidate* for deletion; the caller must confirm with the user before any SP
+ * delete. Only IDs the plugin itself wrote (in the baseline) are considered.
+ */
+export const findRemovedBaselineIds = (lines: string[], baseline: DailyBaseline): string[] => {
+  const present = new Set<string>();
+  for (const line of lines) {
+    const parsed = parseNoteTaskLine(line);
+    if (parsed) present.add(parsed.id);
+  }
+  return Object.keys(baseline).filter((id) => !present.has(id));
+};

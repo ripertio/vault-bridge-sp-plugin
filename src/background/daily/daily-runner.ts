@@ -7,7 +7,8 @@ import {
   resolveInsideVault,
 } from './daily-note';
 import { planDailyNote, DailyPlanTask } from './daily-plan';
-import { DailyBaseline, diffNoteAgainstBaseline, parseNoteTaskLine } from './daily-reverse';
+import { DailyBaseline, diffNoteAgainstBaseline, findRemovedBaselineIds, parseNoteTaskLine } from './daily-reverse';
+import { confirmAndDeleteTasks } from './daily-delete';
 import { findNewTaskLines, stampNewTaskLine } from './daily-create';
 import { findToDosSection } from './daily-note';
 
@@ -65,6 +66,21 @@ export const runDailyNoteDryRun = async (
     }
   }
 
+  // 1a) Delete: a plugin-owned line removed from the note is a candidate. SP is
+  // only changed after the user confirms in a dialog (never automatically).
+  let deletedIds: string[] = [];
+  const removedIds = findRemovedBaselineIds(lines, baseline);
+  if (removedIds.length > 0) {
+    log.log(`  - ${removedIds.length} task line(s) removed from the note`);
+    if (!cfg.dryRun) {
+      const candidates = removedIds.map((id) => ({
+        id,
+        title: tasks.find((t) => t.id === id)?.title ?? id,
+      }));
+      deletedIds = await confirmAndDeleteTasks(PluginAPI as any, candidates);
+    }
+  }
+
   // 1b) Create: task lines the user typed (no ID) become SP tasks in the Inbox.
   let working = [...lines];
   const section = findToDosSection(working);
@@ -108,5 +124,8 @@ export const runDailyNoteDryRun = async (
       next[parsed.id] = { isDone: task.isDone, title: task.title };
     }
   }
+  // A removed line is resolved once the user has answered: drop it from the
+  // baseline either way, so the question is not asked again on every run.
+  for (const id of removedIds) delete next[id];
   deps.saveBaseline(next);
 };
