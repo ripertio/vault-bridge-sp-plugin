@@ -8,6 +8,7 @@ import { runDailyNoteDryRun } from './daily/daily-runner';
 import { scheduleDailyNoteRun, cancelDailyNoteRun, startDailyNoteWatcher, stopDailyNoteWatcher } from './daily/daily-scheduler';
 import { startFileWatcher } from './sync/file-watcher';
 import { resolveDailyNoteCfg } from './daily/daily-note';
+import { validateDailySettings } from './daily/daily-settings';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
 declare const __PLUGIN_VERSION__: string;
@@ -230,6 +231,7 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
       _lastUpdateCheck: currentConfig._lastUpdateCheck,
       _latestVersion: currentConfig._latestVersion,
       _latestUrl: currentConfig._latestUrl,
+      // Bindings saves keep the stored daily settings; daily is saved via saveDailySettings.
       daily: currentConfig.daily,
       _dailyBaseline: currentConfig._dailyBaseline,
     };
@@ -445,6 +447,15 @@ const dailyDeps = () => ({
       if (type === 'saveConfig') {
         applyConfigFromUi(message.config as LocalUserCfgV2);
         return { success: true };
+      }
+      if (type === 'saveDailySettings') {
+        const result = validateDailySettings(message.daily ?? {});
+        if (!result.ok) return { success: false, error: result.error };
+        currentConfig = { ...currentConfig, daily: result.cfg };
+        persistConfig();
+        // Restart the watcher so it follows the new folder or filename format.
+        startDailyNoteWatcher(() => resolveDailyNoteCfg(currentConfig.daily), dailyDeps(), startFileWatcher);
+        return { success: true, daily: result.cfg };
       }
       if (type === 'getProjects') {
         await refreshProjectsCache();
