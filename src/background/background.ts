@@ -241,6 +241,10 @@ const startBindings = async (): Promise<void> => {
   }
   // activeBindingsJson tracks the MANUAL list (what the panel edits), not the
   // effective list, so saving the panel does not restart the registry needlessly.
+  if (projectsDir.enabled) {
+    log.log(`auto project sync: ${result.bindings.length} folder(s) matched`);
+    result.bindings.forEach((b) => log.log(`  ↔ ${b.projectTitle} (${b.filePath})`));
+  }
   initSyncRegistry(result.bindings, currentConfig._lastSynced ?? {});
 };
 
@@ -480,6 +484,9 @@ const dailyDeps = () => ({
         if (!result.ok) return { success: false, error: result.error };
         currentConfig = { ...currentConfig, projectsDir: result.cfg };
         persistConfig();
+        // Auto mode changes which bindings run, so restart the registry now.
+        log.log('Projects settings saved — restarting sync registry');
+        void startBindings();
         return { success: true, projectsDir: result.cfg };
       }
       if (type === 'saveDailySettings') {
