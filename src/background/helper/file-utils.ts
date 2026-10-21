@@ -130,3 +130,35 @@ export const ensureDirectoryExists = async (filePath: string): Promise<void> => 
     throw new Error(nodeResult?.error || toErrorMessage(result.error) || 'Failed to create directory');
   }
 };
+
+/**
+ * List the sub-folder names directly inside `dirPath`. Read-only. Returns [] when
+ * the folder does not exist. Hidden entries (starting with '.') are skipped.
+ */
+export const listSubfolders = async (dirPath: string): Promise<string[]> => {
+  const result = await PluginAPI.executeNodeScript!({
+    script: `
+      const fs = require('fs');
+      const path = require('path');
+      try {
+        const dir = path.resolve(args[0]);
+        const names = fs
+          .readdirSync(dir, { withFileTypes: true })
+          .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
+          .map((e) => e.name);
+        return { success: true, names };
+      } catch (error) {
+        if (error.code === 'ENOENT') return { success: true, names: [] };
+        return { success: false, error: error.message };
+      }
+    `,
+    args: [dirPath],
+    timeout: 5000,
+  });
+
+  const nodeResult = result.result as { success: boolean; names?: string[]; error?: string } | undefined;
+  if (!result.success || !nodeResult?.success) {
+    throw new Error(nodeResult?.error || toErrorMessage(result.error) || 'Failed to list folders');
+  }
+  return nodeResult.names ?? [];
+};

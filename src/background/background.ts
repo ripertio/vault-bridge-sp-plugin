@@ -9,7 +9,9 @@ import { scheduleDailyNoteRun, cancelDailyNoteRun, startDailyNoteWatcher, stopDa
 import { startFileWatcher } from './sync/file-watcher';
 import { resolveDailyNoteCfg } from './daily/daily-note';
 import { validateDailySettings } from './daily/daily-settings';
-import { validateProjectsDirCfg } from './projects/project-dir';
+import { validateProjectsDirCfg, resolveProjectsDirCfg } from './projects/project-dir';
+import { computeEffectiveBindings } from './projects/effective-bindings';
+import { listSubfolders } from './helper/file-utils';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
 declare const __PLUGIN_VERSION__: string;
@@ -218,6 +220,30 @@ const maybeCheckForUpdate = async (isStartup = false): Promise<void> => {
  * there is no polling or persistedDataChanged round-trip anymore, because the UI
  * and background share this process and the change arrives synchronously here.
  */
+// Bindings that should run now: the manual list, or the folder-derived list when
+// auto mode is on. A failed folder scan starts nothing (see effective-bindings.ts).
+const startBindings = async (): Promise<void> => {
+  const projectsDir = resolveProjectsDirCfg(currentConfig.projectsDir);
+  const result = await computeEffectiveBindings(
+    currentConfig.bindings,
+    projectsDir,
+    currentConfig.daily?.vaultPath ?? '',
+    {
+      listFolders: listSubfolders,
+      getProjects: async () =>
+        (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title })),
+    },
+  );
+  if (!result.ok) {
+    log.error(`auto project sync not started: ${result.error}`);
+    initSyncRegistry([], currentConfig._lastSynced ?? {});
+    return;
+  }
+  // activeBindingsJson tracks the MANUAL list (what the panel edits), not the
+  // effective list, so saving the panel does not restart the registry needlessly.
+  initSyncRegistry(result.bindings, currentConfig._lastSynced ?? {});
+};
+
 const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
   try {
     const newBindingsJson = JSON.stringify(incoming?.bindings ?? []);
@@ -239,9 +265,8 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
     };
     persistConfig();
     if (bindingsChanged) {
-      activeBindingsJson = newBindingsJson;
       log.log('[sync-md-multi] Config saved from UI — restarting sync registry');
-      initSyncRegistry(currentConfig.bindings, currentConfig._lastSynced ?? {});
+      void startBindings();
     }
   } catch (err) {
     log.error('[sync-md-multi] Failed to apply config from UI:', err);
@@ -422,8 +447,8 @@ const dailyDeps = () => ({
   );
 
   activeBindingsJson = JSON.stringify(currentConfig?.bindings ?? []);
-  if (currentConfig?.bindings && currentConfig.bindings.length > 0) {
-    initSyncRegistry(currentConfig.bindings, currentConfig._lastSynced ?? {});
+  if (resolveProjectsDirCfg(currentConfig.projectsDir).enabled || (currentConfig?.bindings?.length ?? 0) > 0) {
+    await startBindings();
   }
 
   // ── Config bridge (iframe UI ↔ background) ────────────────────────────────
