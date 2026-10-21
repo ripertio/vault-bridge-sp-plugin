@@ -162,6 +162,30 @@
         </form>
       </div>
 
+      <div class="card" id="projectsCard">
+        <h3>Projects</h3>
+        <p class="file-hint">Each folder under the projects folder syncs with the SP project of the same name. Folders and projects that are excluded are ignored on both sides.</p>
+        <form id="projectsForm">
+          <div class="form-group">
+            <label><input type="checkbox" id="projectsAuto" /> Sync every folder under the projects folder (replaces the manual bindings above)</label>
+          </div>
+          <div class="form-group">
+            <label for="projectsDir">Projects folder (inside the vault path)</label>
+            <div class="file-input-row">
+              <input type="text" id="projectsDir" placeholder="Projects" />
+              <button type="button" class="btn btn-outline" id="projectsDirBrowse">Browse…</button>
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="projectsExcluded">Excluded (one name per line, folder or project title)</label>
+            <textarea id="projectsExcluded" rows="4" placeholder="Old project"></textarea>
+          </div>
+          <div class="actions">
+            <button type="submit" class="btn btn-primary" id="projectsSaveBtn">Save Projects</button>
+          </div>
+        </form>
+      </div>
+
       <div id="status" class="status"></div>
 
       <footer class="app-footer">
@@ -334,6 +358,7 @@
             // fall back to if getAllProjects() returns only Inbox.
             projects = data._cachedProjects || [];
             loadDailyForm(data.daily || {});
+            loadProjectsForm(data.projectsDir || {});
           }
 
           // Load the project dropdown (with direct API call + cache fallback + retry)
@@ -814,12 +839,12 @@
       let fbFolderMode = false;
       let fbTarget = null;
 
-      function fbOpenFolder(targetInputId) {
+      function fbOpenFolder(targetInputId, startDir) {
         fbFolderMode = true;
         fbTarget = targetInputId;
         document.getElementById('fbUseFolderBtn').style.display = 'inline-block';
         const existing = document.getElementById(targetInputId).value.trim();
-        fbOpenAt(existing);
+        fbOpenAt(startDir || existing);
       }
 
       function fbOpenAt(startDir) {
@@ -856,8 +881,21 @@
       document.getElementById('dailyPathBrowse').addEventListener('click', () => fbOpenFolder('dailyPath'));
       document.getElementById('fbUseFolderBtn').addEventListener('click', () => {
         if (fbTarget && fbCurrentDir) {
-          document.getElementById(fbTarget).value = fbCurrentDir;
-          updateDailyPreview();
+          // The projects folder is stored relative to the vault path.
+          if (fbTarget === 'projectsDir') {
+            const vault = document.getElementById('dailyPath').value.trim().replace(/[\\/]+$/, '');
+            const rel = vault && (fbCurrentDir === vault || fbCurrentDir.startsWith(vault + '/'))
+              ? fbCurrentDir.slice(vault.length).replace(/^\/+/, '')
+              : null;
+            if (rel === null) {
+              showStatus('Choose a folder inside the vault path.', 'error');
+              return;
+            }
+            document.getElementById(fbTarget).value = rel || '.';
+          } else {
+            document.getElementById(fbTarget).value = fbCurrentDir;
+            updateDailyPreview();
+          }
         }
         fbClose();
       });
@@ -937,6 +975,36 @@
           showStatus('Daily notes settings saved', 'success');
         } catch (err) {
           showStatus('Error saving daily notes: ' + (err.message || err), 'error');
+        }
+      });
+
+      // ── Projects (folder ↔ SP project sync) ─────────────────────────────────
+      function loadProjectsForm(p) {
+        document.getElementById('projectsAuto').checked = !!p.enabled;
+        document.getElementById('projectsDir').value = p.projectsDir ?? 'Projects';
+        document.getElementById('projectsExcluded').value = (p.excluded || []).join('\n');
+      }
+
+      document.getElementById('projectsDirBrowse').addEventListener('click', () => {
+        // The projects folder is relative to the vault path, so the browser starts there.
+        const vault = document.getElementById('dailyPath').value.trim();
+        fbOpenFolder('projectsDir', vault);
+      });
+
+      document.getElementById('projectsForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const projectsDir = {
+          enabled: document.getElementById('projectsAuto').checked,
+          projectsDir: document.getElementById('projectsDir').value.trim(),
+          excluded: document.getElementById('projectsExcluded').value.split('\n'),
+        };
+        try {
+          const res = await sendMessage({ type: 'saveProjectsDir', projectsDir });
+          if (!res || !res.success) throw new Error((res && res.error) || 'no response from background');
+          loadProjectsForm(res.projectsDir || projectsDir);
+          showStatus('Projects settings saved', 'success');
+        } catch (err) {
+          showStatus('Error saving projects: ' + (err.message || err), 'error');
         }
       });
 
