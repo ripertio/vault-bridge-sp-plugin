@@ -246,6 +246,18 @@ describe('runDailyNoteDryRun', () => {
     expect(batch).not.toHaveBeenCalled();
   });
 
+  it('records a task created from the note in the baseline, so its removal can be detected', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] Neuer Task');
+    const saveBaseline = jest.fn();
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: [] }]),
+      getTasks: jest.fn().mockResolvedValue([]),
+      addTask: jest.fn().mockResolvedValue('NEW3'),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, { getBaseline: () => ({}), saveBaseline }, NOW);
+    expect(saveBaseline.mock.calls.at(-1)?.[0]).toHaveProperty('NEW3');
+  });
+
   it('never mutates SP tasks', async () => {
     setSp(['p1', 'i1']);
     await runDailyNoteDryRun(cfg, deps, NOW);

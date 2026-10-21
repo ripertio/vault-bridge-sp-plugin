@@ -87,6 +87,7 @@ export const runDailyNoteDryRun = async (
   let working = [...lines];
   const section = findToDosSection(working);
   const created: string[] = [];
+  const createdTasks: { id: string; title: string; isDone: boolean }[] = [];
   if (section) {
     const newTasks = findNewTaskLines(working, section.bodyStart, section.bodyEnd);
     for (const nt of newTasks) {
@@ -95,6 +96,7 @@ export const runDailyNoteDryRun = async (
       const id = await PluginAPI.addTask({ title: nt.title, isDone: nt.isDone });
       working[nt.lineIndex] = stampNewTaskLine(working[nt.lineIndex], id);
       created.push(id);
+      createdTasks.push({ id, title: nt.title, isDone: nt.isDone });
     }
   }
 
@@ -119,10 +121,15 @@ export const runDailyNoteDryRun = async (
 
   // 3) Baseline = what the plugin now agrees with, for lines it owns.
   const next: DailyBaseline = { ...baseline };
+  // Every ID on a note line is owned by the plugin, including tasks created from
+  // the note (they live in the Inbox, so they are not in `planned`).
+  const byId = new Map<string, { id: string; title: string; isDone: boolean }>(
+    [...tasks, ...createdTasks].map((t) => [t.id, t]),
+  );
   for (const line of result.nextLines) {
     const parsed = parseNoteTaskLine(line);
-    if (parsed && planned.some((t) => t.id === parsed.id)) {
-      const task = planned.find((t) => t.id === parsed.id)!;
+    const task = parsed && byId.get(parsed.id);
+    if (parsed && task) {
       next[parsed.id] = { isDone: task.isDone, title: task.title };
     }
   }
