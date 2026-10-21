@@ -162,3 +162,44 @@ export const listSubfolders = async (dirPath: string): Promise<string[]> => {
   }
   return nodeResult.names ?? [];
 };
+
+/**
+ * Rename one folder directly inside `parentDir`. Both names must be plain folder
+ * names (no separators or '..'), so the rename cannot leave `parentDir`. Fails if
+ * the target already exists, so nothing is overwritten.
+ */
+export const renameSubfolder = async (
+  parentDir: string,
+  from: string,
+  to: string,
+): Promise<void> => {
+  const plain = (n: string) => n.length > 0 && !/[\\/]/.test(n) && n !== '.' && n !== '..';
+  if (!plain(from) || !plain(to)) throw new Error('invalid folder name');
+
+  const result = await PluginAPI.executeNodeScript!({
+    script: `
+      const fs = require('fs');
+      const path = require('path');
+      try {
+        const parent = path.resolve(args[0]);
+        const src = path.join(parent, args[1]);
+        const dst = path.join(parent, args[2]);
+        if (path.dirname(src) !== parent || path.dirname(dst) !== parent) {
+          return { success: false, error: 'rename escapes the projects folder' };
+        }
+        if (fs.existsSync(dst)) return { success: false, error: 'target exists' };
+        fs.renameSync(src, dst);
+        return { success: true };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    `,
+    args: [parentDir, from, to],
+    timeout: 5000,
+  });
+
+  const nodeResult = result.result as { success: boolean; error?: string } | undefined;
+  if (!result.success || !nodeResult?.success) {
+    throw new Error(nodeResult?.error || toErrorMessage(result.error) || 'rename failed');
+  }
+};

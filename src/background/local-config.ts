@@ -43,6 +43,8 @@ export interface LocalUserCfgV2 {
   // Last state the plugin wrote for each daily-note task (id → done/title). Used
   // to tell which side changed. Device-local, like _lastSynced.
   _dailyBaseline?: Record<string, { isDone: boolean; title: string }>;
+  // projectId → folder name for auto project sync. Stable identity for renames.
+  _projectLinks?: Record<string, string>;
 }
 
 // Legacy interface for migration

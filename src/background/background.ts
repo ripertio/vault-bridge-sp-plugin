@@ -11,7 +11,8 @@ import { resolveDailyNoteCfg } from './daily/daily-note';
 import { validateDailySettings } from './daily/daily-settings';
 import { validateProjectsDirCfg, resolveProjectsDirCfg } from './projects/project-dir';
 import { computeEffectiveBindings } from './projects/effective-bindings';
-import { listSubfolders } from './helper/file-utils';
+import { listSubfolders, renameSubfolder } from './helper/file-utils';
+import { planRenames } from './projects/rename';
 import { spToMd } from './sync/sp-to-md';
 import { createSpProject } from './sync/missing-resource';
 import { planReconcile } from './projects/reconcile';
@@ -238,7 +239,35 @@ const startBindings = async (): Promise<void> => {
       const absDir = `${vaultPath.replace(/[\\/]+$/, '')}/${projectsDir.projectsDir}`;
       const folders = await listSubfolders(absDir);
       const projects = (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title }));
-      const match = matchFoldersToProjects(folders, projects, projectsDir.excluded);
+      const writeMode = !resolveDailyNoteCfg(currentConfig.daily).dryRun;
+      const links = currentConfig._projectLinks ?? {};
+
+      // Renames first, so the reconcile below sees the already-renamed folders.
+      const renames = planRenames(links, folders, projects);
+      for (const r of renames.renameFolders) {
+        log.log(`rename folder "${r.from}" → "${r.to}"${writeMode ? '' : ' (dry-run)'}`);
+        if (writeMode) await renameSubfolder(absDir, r.from, r.to);
+      }
+      for (const r of renames.renameProjects) {
+        log.log(`rename SP project "${r.from}" → "${r.to}"${writeMode ? '' : ' (dry-run)'}`);
+        if (writeMode) await PluginAPI.updateProject(r.projectId, { title: r.to });
+      }
+      const renamedFolders = writeMode
+        ? folders.map((f) => renames.renameFolders.find((r) => r.from === f)?.to ?? f)
+        : folders;
+      const renamedProjects = writeMode
+        ? projects.map((p) => ({ ...p, title: renames.renameProjects.find((r) => r.projectId === p.id)?.to ?? p.title }))
+        : projects;
+
+      const match = matchFoldersToProjects(renamedFolders, renamedProjects, projectsDir.excluded);
+      // Remember folder ↔ project pairs so a later rename can be told apart from a
+      // delete + create. Only saved in write mode, so a dry-run changes nothing.
+      if (writeMode) {
+        const nextLinks: Record<string, string> = {};
+        for (const m of match.matched) nextLinks[m.projectId] = m.folder;
+        currentConfig = { ...currentConfig, _projectLinks: nextLinks };
+        persistConfig();
+      }
       await runProjectsReconcile(planReconcile(match), absDir, resolveDailyNoteCfg(currentConfig.daily).dryRun, {
         createProject: createSpProject,
         writeBacklog: async (binding) => {
