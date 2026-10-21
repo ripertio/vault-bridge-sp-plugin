@@ -8,6 +8,8 @@ import {
 } from './daily-note';
 import { planDailyNote, DailyPlanTask } from './daily-plan';
 import { DailyBaseline, diffNoteAgainstBaseline, parseNoteTaskLine } from './daily-reverse';
+import { findNewTaskLines, stampNewTaskLine } from './daily-create';
+import { findToDosSection } from './daily-note';
 
 export interface DailyRunDeps {
   // Persist the baseline after a successful write (device-local config).
@@ -63,11 +65,27 @@ export const runDailyNoteDryRun = async (
     }
   }
 
-  // 2) Forward: SP → note.
-  const result = planDailyNote(cfg, lines, planned);
+  // 1b) Create: task lines the user typed (no ID) become SP tasks in the Inbox.
+  let working = [...lines];
+  const section = findToDosSection(working);
+  const created: string[] = [];
+  if (section) {
+    const newTasks = findNewTaskLines(working, section.bodyStart, section.bodyEnd);
+    for (const nt of newTasks) {
+      log.log(`  + note → SP "${nt.title}"${cfg.dryRun ? ' (dry-run)' : ''}`);
+      if (cfg.dryRun) continue;
+      const id = await PluginAPI.addTask({ title: nt.title, isDone: nt.isDone });
+      working[nt.lineIndex] = stampNewTaskLine(working[nt.lineIndex], id);
+      created.push(id);
+    }
+  }
+
+  // 2) Forward: SP → note. In write mode, created tasks are not yet in the Today
+  // tag, so they are not planned here; they are stamped with their ID above.
+  const result = planDailyNote(cfg, working, planned);
   result.logLines.forEach((line) => log.log(line));
 
-  const changes = result.missingTaskIds.length + result.statusChangedTaskIds.length;
+  const changes = result.missingTaskIds.length + result.statusChangedTaskIds.length + created.length;
   if (cfg.dryRun || changes === 0) return;
 
   // Re-read right before writing: if the user edited the note since the plan was
@@ -78,6 +96,7 @@ export const runDailyNoteDryRun = async (
     return;
   }
   await writeTasksFile(notePath, result.nextLines.join('\n'));
+  if (created.length > 0) log.log(`created ${created.length} SP task(s) from the note`);
   log.log(`daily note updated: +${result.missingTaskIds.length} task(s), ~${result.statusChangedTaskIds.length} checkbox(es)`);
 
   // 3) Baseline = what the plugin now agrees with, for lines it owns.

@@ -178,6 +178,32 @@ describe('runDailyNoteDryRun', () => {
     expect(saveBaseline).not.toHaveBeenCalled();
   });
 
+  it('creates an SP task for a typed note line and stamps its ID (write mode)', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] Neuer Task');
+    const addTask = jest.fn().mockResolvedValue('NEW1');
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: [] }]),
+      getTasks: jest.fn().mockResolvedValue([]),
+      addTask,
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, deps, NOW);
+    expect(addTask).toHaveBeenCalledWith({ title: 'Neuer Task', isDone: false });
+    expect(mockedWrite).toHaveBeenCalledWith('/vault/Daily/2026-10-21.md', '## To Dos\n- [ ] <!--NEW1--> Neuer Task');
+  });
+
+  it('does not create SP tasks in dry-run', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] Neuer Task');
+    const addTask = jest.fn();
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: [] }]),
+      getTasks: jest.fn().mockResolvedValue([]),
+      addTask,
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: true }, deps, NOW);
+    expect(addTask).not.toHaveBeenCalled();
+    expect(mockedWrite).not.toHaveBeenCalled();
+  });
+
   it('never mutates SP tasks', async () => {
     setSp(['p1', 'i1']);
     await runDailyNoteDryRun(cfg, deps, NOW);
