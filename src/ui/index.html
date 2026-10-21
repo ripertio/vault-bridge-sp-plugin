@@ -91,41 +91,6 @@
       <h1>sync.md Multi</h1>
       <p class="subtitle">Manage multiple project-to-markdown sync bindings</p>
 
-      <div class="card">
-        <h3>Active Bindings</h3>
-        <div id="bindingsList">
-          <div class="empty-state">No bindings configured yet.</div>
-        </div>
-      </div>
-
-      <div class="card" id="formCard">
-        <h3 id="formTitle">Add New Binding</h3>
-        <form id="bindingForm">
-          <input type="hidden" id="bindingId" />
-          <div class="form-group">
-            <label for="projectId">Super Productivity Project</label>
-            <div style="display:flex;gap:6px;align-items:center;">
-              <select id="projectId" required style="flex:1;">
-                <option value="">Loading projects...</option>
-              </select>
-              <button type="button" class="btn btn-outline" id="refreshProjectsBtn" title="Refresh project list" style="flex-shrink:0;padding:6px 10px;">↺</button>
-            </div>
-          </div>
-          <div class="form-group">
-            <label for="filePath">Markdown File Path</label>
-            <div class="file-input-row">
-              <input type="text" id="filePath" placeholder="/path/to/your/tasks.md" required />
-              <button type="button" class="btn btn-outline" id="browseBtn">Browse…</button>
-            </div>
-            <span class="file-hint">Use Browse… to navigate the filesystem, or type the absolute path directly</span>
-          </div>
-          <div class="actions">
-            <button type="submit" class="btn btn-primary" id="saveBtn">Add Binding</button>
-            <button type="button" class="btn btn-outline" id="cancelBtn" style="display:none">Cancel</button>
-          </div>
-        </form>
-      </div>
-
       <div class="card" id="vaultCard">
         <h3>Vault</h3>
         <p class="file-hint">The Obsidian vault used by Daily Notes and Projects. Every file the plugin reads or writes stays inside it.</p>
@@ -180,7 +145,7 @@
         <p class="file-hint">Each folder under the projects folder syncs with the SP project of the same name. Folders and projects that are excluded are ignored on both sides.</p>
         <form id="projectsForm">
           <div class="form-group">
-            <label><input type="checkbox" id="projectsAuto" /> Sync every folder under the projects folder (replaces the manual bindings above)</label>
+            <label><input type="checkbox" id="projectsAuto" /> Sync every folder under the projects folder</label>
           </div>
           <div class="form-group">
             <label for="projectsDir">Projects folder (inside the vault path)</label>
@@ -202,7 +167,10 @@
       <div class="card" id="linksCard">
         <h3>Links</h3>
         <p class="file-hint">Every folder in the projects folder and every SP project, with how they are matched. Ignore excludes a name on both sides.</p>
-        <div class="actions"><button type="button" class="btn btn-outline" id="linksRefreshBtn">Refresh</button></div>
+        <div class="actions">
+          <button type="button" class="btn btn-primary" id="newBindingBtn">New binding…</button>
+          <button type="button" class="btn btn-outline" id="linksRefreshBtn">Refresh</button>
+        </div>
         <table class="links-table" id="linksTable" style="width:100%;border-collapse:collapse;margin-top:8px;">
           <thead><tr><th style="text-align:left;">Name</th><th style="text-align:left;">Folder</th><th style="text-align:left;">SP project</th><th style="text-align:left;">State</th><th></th></tr></thead>
           <tbody id="linksBody"><tr><td colspan="5" class="file-hint">Press Refresh to load.</td></tr></tbody>
@@ -247,23 +215,11 @@
       </div>
     </div>
 
-    <!-- ── Delete-binding confirm modal (3 options) ─────────────────────── -->
-    <div class="modal-overlay" id="confirmOverlay">
-      <div class="modal-panel">
-        <h3>Delete this binding?</h3>
-        <p>Removing the binding stops syncing this file. The Markdown keeps its hidden sync markers (<code>&lt;!--…--&gt;</code>) unless you clean it.</p>
-        <div class="modal-actions">
-          <button class="btn btn-outline" id="confirmCancelBtn">Cancel</button>
-          <button class="btn btn-danger-outline" id="confirmCleanBtn">Delete + clean file</button>
-          <button class="btn btn-danger" id="confirmDeleteBtn">Delete binding</button>
-        </div>
-      </div>
-    </div>
+
 
     <script>
       let config = { version: 2, bindings: [] };
       let projects = [];
-      let projectsLoadAttempts = 0;
 
       /**
        * Message bridge to the background script (v0.4.0).
@@ -315,66 +271,6 @@
        *   3. Retry automatically after 2 s (in case SP hadn't finished loading the
        *      project state into the iframe context yet).
        */
-      async function loadProjects() {
-        const sel = document.getElementById('projectId');
-        const currentVal = sel.value; // preserve any in-progress selection
-        try {
-          let freshProjects = null;
-
-          if (PluginAPI.getAllProjects) {
-            const raw = await PluginAPI.getAllProjects();
-            // SP may return only Inbox when the iframe hasn't fully initialised yet.
-            // Treat a single-entry result as "not ready" and fall back to the cache.
-            if (raw && raw.length > 1) {
-              freshProjects = raw.map(p => ({ id: p.id, title: p.title }));
-            }
-          }
-
-          // Fall back to background-maintained cache
-          if (!freshProjects || freshProjects.length === 0) {
-            freshProjects = projects; // already seeded from the background's cache
-          }
-
-          if (!freshProjects || freshProjects.length === 0) {
-            sel.innerHTML = '<option value="">No projects found — try the ↺ button in a moment</option>';
-            // Retry once after 2 s (same as original sync.md)
-            if (projectsLoadAttempts < 3) {
-              projectsLoadAttempts++;
-              setTimeout(loadProjects, 2000);
-            }
-            return;
-          }
-
-          projects = freshProjects;
-          projectsLoadAttempts = 0;
-
-          // Filter out projects that already have a binding, except for the project
-          // belonging to the binding currently being edited (if any).
-          const currentEditingId = document.getElementById('bindingId').value;
-          const boundProjectIds = new Set(
-            config.bindings
-              .filter(b => b.id !== currentEditingId)
-              .map(b => b.projectId)
-          );
-          const availableProjects = projects.filter(p => !boundProjectIds.has(p.id));
-
-          sel.innerHTML = '<option value="">Select a project...</option>';
-          availableProjects.forEach(p => {
-            const opt = document.createElement('option');
-            opt.value = p.id;
-            opt.textContent = p.title;
-            sel.appendChild(opt);
-          });
-          if (currentVal) sel.value = currentVal; // restore selection if possible
-        } catch (e) {
-          console.error('[sync-md] loadProjects error:', e);
-          // Retry after 2 s
-          if (projectsLoadAttempts < 3) {
-            projectsLoadAttempts++;
-            setTimeout(loadProjects, 2000);
-          }
-        }
-      }
 
       async function loadData() {
         try {
@@ -390,19 +286,14 @@
               _latestVersion: data._latestVersion,
               _latestUrl: data._latestUrl,
             };
-            // Seed the projects array from cache so loadProjects() has something to
-            // fall back to if getAllProjects() returns only Inbox.
+            // Seed the project list used by the Links bind dropdown.
             projects = data._cachedProjects || [];
             loadDailyForm(data.daily || {});
             loadProjectsForm(data.projectsDir || {});
             document.getElementById('vaultPath').value = data.vaultPath || (data.daily && data.daily.vaultPath) || '';
           }
 
-          // Load the project dropdown (with direct API call + cache fallback + retry)
-          projectsLoadAttempts = 0;
-          await loadProjects();
 
-          renderBindings();
           renderUpdateIndicator();
         } catch (e) {
           console.error('[sync-md] loadData error:', e);
@@ -458,58 +349,6 @@
         }
       }
 
-      function renderBindings() {
-        const list = document.getElementById('bindingsList');
-        if (!config.bindings || config.bindings.length === 0) {
-          list.innerHTML = '<div class="empty-state">No bindings configured yet.</div>';
-          return;
-        }
-        list.innerHTML = '';
-        const lastSynced = config._lastSynced || {};
-        config.bindings.forEach(b => {
-          const p = projects.find(proj => proj.id === b.projectId);
-          const div = document.createElement('div');
-          div.className = 'binding-item';
-
-          // Build the row with DOM APIs and textContent — never innerHTML with
-          // dynamic values (project titles, paths and binding IDs are
-          // user-controlled and would otherwise allow script injection into
-          // this nodeExecution-capable iframe).
-          const info = document.createElement('div');
-          info.className = 'binding-info';
-
-          const name = document.createElement('span');
-          name.className = 'binding-name';
-          name.textContent = p ? p.title : b.projectId;
-
-          const path = document.createElement('span');
-          path.className = 'binding-path';
-          path.textContent = b.filePath;
-
-          const synced = document.createElement('span');
-          synced.className = 'binding-synced';
-          synced.textContent = formatLastSynced(lastSynced[b.id]);
-
-          info.append(name, path, synced);
-
-          const actions = document.createElement('div');
-          actions.className = 'actions';
-
-          const editBtn = document.createElement('button');
-          editBtn.className = 'btn btn-outline';
-          editBtn.textContent = 'Edit';
-          editBtn.addEventListener('click', () => editBinding(b.id));
-
-          const delBtn = document.createElement('button');
-          delBtn.className = 'btn btn-danger';
-          delBtn.textContent = 'Delete';
-          delBtn.addEventListener('click', () => deleteBinding(b.id));
-
-          actions.append(editBtn, delBtn);
-          div.append(info, actions);
-          list.appendChild(div);
-        });
-      }
 
       // Lexical fallback canonicalizer — mirror of canonicalizePathKey in
       // src/background/helper/path-utils.ts. Used when a Node call is not
@@ -568,202 +407,24 @@
         return paths.map(canonicalizePathKey);
       }
 
-      document.getElementById('bindingForm').onsubmit = async (e) => {
-        e.preventDefault();
-        const id = document.getElementById('bindingId').value || 'b-' + Date.now();
-        const projectId = document.getElementById('projectId').value;
-        const filePath = document.getElementById('filePath').value.trim();
 
-        // Reject a file already bound elsewhere — comparing CANONICAL paths, so
-        // `/tmp/tasks.md` and `/tmp/./tasks.md` (or a symlink) are caught too.
-        const others = config.bindings.filter(b => b.id !== id);
-        const canon = await canonicalizePaths([filePath, ...others.map(b => b.filePath)]);
-        const collisionIdx = canon.slice(1).indexOf(canon[0]);
-        if (collisionIdx > -1) {
-          showStatus('This file is already used by another binding (it resolves to the same file, possibly via a different path or a symlink). Each binding must have a unique file.', 'error');
-          return;
-        }
 
-        const newBinding = { id, projectId, filePath, enabled: true };
-        const idx = config.bindings.findIndex(b => b.id === id);
 
-        if (idx > -1) config.bindings[idx] = newBinding;
-        else config.bindings.push(newBinding);
-
-        try {
-          // Persist via the background (single writer of device-local config).
-          // Send only version + bindings; the background owns _cachedProjects /
-          // _lastSynced / update-notifier state and merges them in.
-          const res = await sendMessage({
-            type: 'saveConfig',
-            config: { version: config.version || 2, bindings: config.bindings },
-          });
-          if (!res || !res.success) throw new Error((res && res.error) || 'no response from background');
-          showStatus('Configuration saved', 'success');
-          await resetForm();
-          renderBindings();
-        } catch (err) {
-          showStatus('Error saving: ' + (err.message || err), 'error');
-        }
-      };
-
-      window.editBinding = async function(id) {
-        const b = config.bindings.find(b => b.id === id);
-        if (b) {
-          // Set the editing id BEFORE rebuilding the dropdown so loadProjects()
-          // knows to include this binding's project in the available list.
-          document.getElementById('bindingId').value = b.id;
-          await loadProjects();
-          document.getElementById('projectId').value = b.projectId;
-          document.getElementById('filePath').value = b.filePath;
-          document.getElementById('formTitle').textContent = 'Edit Binding';
-          document.getElementById('saveBtn').textContent = 'Update Binding';
-          document.getElementById('cancelBtn').style.display = 'inline-block';
-          // Draw the eye to the form: smooth-scroll it into view and flash it,
-          // so it's obvious the edit happens down here (not in the list above).
-          const formCard = document.getElementById('formCard');
-          formCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          formCard.classList.remove('flash-edit');
-          void formCard.offsetWidth; // reflow so the animation restarts each time
-          formCard.classList.add('flash-edit');
-        }
-      };
-
-      async function resetForm() {
-        document.getElementById('bindingId').value = '';
-        document.getElementById('bindingForm').reset();
-        document.getElementById('formTitle').textContent = 'Add New Binding';
-        document.getElementById('saveBtn').textContent = 'Add Binding';
-        document.getElementById('cancelBtn').style.display = 'none';
-        // Rebuild dropdown for "Add" mode: the project we were editing is no
-        // longer exempt, so it should disappear from the available list again.
-        await loadProjects();
-      }
-
-      document.getElementById('cancelBtn').onclick = resetForm;
 
       // ── Delete binding: 3-option confirm modal ──────────────────────────
       let pendingDeleteId = null;
 
-      window.deleteBinding = function(id) {
-        pendingDeleteId = id;
-        // Prefer SP's native dialog (matches the deleted-project dialogs, theme-aware).
-        // Fall back to the custom in-panel modal if openDialog isn't exposed here.
-        if (typeof PluginAPI.openDialog === 'function') {
-          PluginAPI.openDialog({
-            htmlContent:
-              '<h3>Delete this binding?</h3>' +
-              '<p>Removing the binding stops syncing this file. The Markdown keeps its ' +
-              'hidden sync markers (<code>&lt;!--…--&gt;</code>) unless you clean it.</p>',
-            buttons: [
-              { label: 'Delete binding', color: 'warn', onClick: () => performDelete(false) },
-              { label: 'Delete + clean file', color: 'warn', onClick: () => performDelete(true) },
-              { label: 'Cancel', onClick: () => { pendingDeleteId = null; } },
-            ],
-          });
-        } else {
-          document.getElementById('confirmOverlay').classList.add('open');
-        }
-      };
 
-      function closeConfirm() {
-        document.getElementById('confirmOverlay').classList.remove('open');
-        pendingDeleteId = null;
-      }
 
       /**
        * Strip the <!--taskId--> markers from a .md file so it's left neutral.
        * Returns: null if the file doesn't exist, true if it changed, false if
        * it was already clean. The strip mirrors sync-manager's stripTaskIds.
        */
-      async function sanitizeMdFile(filePath) {
-        const content = await readFileRaw(filePath);
-        if (content === null) return null;
-        const cleaned = content.replace(/^(\s*- \[[ x]\]\s*)<!--[^>]*-->\s*/gm, '$1');
-        if (cleaned === content) return false;
-        await writeFileRaw(filePath, cleaned);
-        return true;
-      }
 
-      async function readFileRaw(filePath) {
-        const r = await PluginAPI.executeNodeScript({
-          script: `
-            const fs = require('fs');
-            const path = require('path');
-            try {
-              const content = fs.readFileSync(path.resolve(args[0]), 'utf8');
-              return { success: true, content };
-            } catch (e) {
-              if (e.code === 'ENOENT') return { success: true, content: null };
-              return { success: false, error: e.message };
-            }
-          `,
-          args: [filePath],
-          timeout: 5000,
-        });
-        const res = r && r.result;
-        if (!res || !res.success) throw new Error((res && res.error) || 'read failed');
-        return res.content ?? null;
-      }
 
-      async function writeFileRaw(filePath, content) {
-        const r = await PluginAPI.executeNodeScript({
-          script: `
-            const fs = require('fs');
-            const path = require('path');
-            try {
-              fs.writeFileSync(path.resolve(args[0]), args[1], 'utf8');
-              return { success: true };
-            } catch (e) {
-              return { success: false, error: e.message };
-            }
-          `,
-          args: [filePath, content],
-          timeout: 5000,
-        });
-        const res = r && r.result;
-        if (!res || !res.success) throw new Error((res && res.error) || 'write failed');
-      }
 
-      async function performDelete(clean) {
-        const id = pendingDeleteId;
-        closeConfirm();
-        if (!id) return;
-        const binding = config.bindings.find(b => b.id === id);
 
-        // Optionally clean the .md first (while we still have the file path).
-        let cleanNote = '';
-        if (clean && binding) {
-          try {
-            const changed = await sanitizeMdFile(binding.filePath);
-            cleanNote = changed === null ? ' (file not found)'
-              : changed ? ' + file cleaned'
-              : ' (file already clean)';
-          } catch (e) {
-            console.error('[sync-md] sanitize failed:', e);
-            cleanNote = " (couldn't clean file)";
-          }
-        }
-
-        config.bindings = config.bindings.filter(b => b.id !== id);
-        try {
-          const res = await sendMessage({
-            type: 'saveConfig',
-            config: { version: config.version || 2, bindings: config.bindings },
-          });
-          if (!res || !res.success) throw new Error((res && res.error) || 'no response from background');
-          showStatus('Binding deleted' + cleanNote, 'success');
-          renderBindings();
-          // Freed project should reappear in the dropdown immediately.
-          await loadProjects();
-        } catch (err) {
-          showStatus('Error deleting: ' + (err.message || err), 'error');
-        }
-      }
-
-      document.getElementById('confirmDeleteBtn').onclick = () => performDelete(false);
-      document.getElementById('confirmCleanBtn').onclick = () => performDelete(true);
-      document.getElementById('confirmCancelBtn').onclick = closeConfirm;
 
       // ── Inline file browser ─────────────────────────────────────────────────
       let fbCurrentDir = '';
@@ -873,8 +534,6 @@
                 else showStatus('Choose a file inside the projects folder.', 'error');
                 return;
               }
-              // Select the file
-              document.getElementById('filePath').value = item.path;
               fbClose();
             }
           });
@@ -917,26 +576,12 @@
         document.getElementById('fbUseFolderBtn').style.display = 'none';
       }
 
-      function fbOpen() {
-        fbResetMode();
-        document.getElementById('fbOverlay').classList.add('open');
-        // Start from the directory of any already-entered path, or home
-        const existingPath = document.getElementById('filePath').value.trim();
-        let startDir = '';
-        if (existingPath) {
-          // Use the parent directory of whatever is already typed
-          const lastSep = Math.max(existingPath.lastIndexOf('/'), existingPath.lastIndexOf('\\'));
-          startDir = lastSep > 0 ? existingPath.substring(0, lastSep) : '';
-        }
-        fbLoadDir(startDir);
-      }
 
       function fbClose() {
         document.getElementById('fbOverlay').classList.remove('open');
         fbResetMode();
       }
 
-      document.getElementById('browseBtn').addEventListener('click', fbOpen);
       document.getElementById('vaultPathBrowse').addEventListener('click', () => fbOpenFolder('vaultPath'));
       document.getElementById('fbUseFolderBtn').addEventListener('click', () => {
         if (fbTarget && fbCurrentDir) {
@@ -982,15 +627,10 @@
       // plugin. Use the Browse… button instead.
       // These listeners are kept as a no-op safety net in case a future SP
       // version forwards drag events to the iframe.
-      const fileInput = document.getElementById('filePath');
       document.addEventListener('dragover', e => e.preventDefault());
       document.addEventListener('drop',     e => e.preventDefault());
 
       // ── Refresh button ──────────────────────────────────────────────────────
-      document.getElementById('refreshProjectsBtn').addEventListener('click', () => {
-        projectsLoadAttempts = 0;
-        loadProjects();
-      });
 
       // ── Init ────────────────────────────────────────────────────────────────
       // ── Vault (shared by Daily Notes and Projects) ───────────────────────────
@@ -1178,6 +818,13 @@
       }
 
       document.getElementById('linksRefreshBtn').addEventListener('click', refreshLinks);
+      // New binding: pick a .md file in the projects folder, then its SP project.
+      // A binding is a folder bind, so it is stored and synced the same way.
+      document.getElementById('newBindingBtn').addEventListener('click', () => {
+        fbPickBindFile((file) => {
+          if (file) chooseBindProject(file, { projectId: null, projectTitle: null });
+        });
+      });
 
       // Bind: pick a .md file in the projects folder, then a project from a list.
       async function startBind(row) {
@@ -1240,8 +887,6 @@
                   const oldJson = JSON.stringify(projects);
                   if (newJson !== oldJson) {
                     projects = fresh;
-                    projectsLoadAttempts = 0;
-                    await loadProjects();
                   }
                 }
               } catch (e) {

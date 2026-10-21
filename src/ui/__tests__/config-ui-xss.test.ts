@@ -102,31 +102,11 @@ async function loadUi(
       });
     },
   });
-  await flush(dom, () =>
-    Boolean(dom.window.document.querySelector('#bindingsList .binding-item')),
-  );
+  await flush(dom, () => dom.window.document.getElementById('projectsDir') !== null);
   return dom;
 }
 
 describe('config UI — no HTML injection from dynamic values', () => {
-  it('renders project title and file path as text in the bindings list', async () => {
-    const dom = await loadUi(makePluginApi());
-    const doc = dom.window.document;
-    const list = doc.getElementById('bindingsList');
-
-    // No element got injected anywhere in the list, and no script ran.
-    expect(list.querySelectorAll('img, script').length).toBe(0);
-    expect(dom.window.__pwned).toBeUndefined();
-
-    const nameEl = list.querySelector('.binding-name');
-    expect(nameEl.textContent).toBe(XSS);
-    expect(nameEl.querySelectorAll('*').length).toBe(0); // inserted as text
-
-    const pathEl = list.querySelector('.binding-path');
-    expect(pathEl.textContent).toBe(`/tmp/${XSS}.md`);
-    expect(pathEl.querySelectorAll('*').length).toBe(0);
-  });
-
   it('renders raw filesystem entry names as text in the file browser', async () => {
     const api = makePluginApi({
       executeNodeScript: async () => ({
@@ -142,7 +122,7 @@ describe('config UI — no HTML injection from dynamic values', () => {
     const dom = await loadUi(api);
     const doc = dom.window.document;
 
-    doc.getElementById('browseBtn').click();
+    doc.getElementById('vaultPathBrowse').click();
     await flush(dom, () => Boolean(doc.querySelector('#fbList .fb-item')));
 
     const fbList = doc.getElementById('fbList');
@@ -164,7 +144,7 @@ describe('config UI — no HTML injection from dynamic values', () => {
     const dom = await loadUi(api);
     const doc = dom.window.document;
 
-    doc.getElementById('browseBtn').click();
+    doc.getElementById('vaultPathBrowse').click();
     await flush(dom, () => Boolean(doc.querySelector('#fbList .fb-error')));
 
     const fbList = doc.getElementById('fbList');
