@@ -3,7 +3,9 @@ import { log } from '../../shared/logger';
 import {
   DailyNoteCfg,
   dailyNoteRelativePath,
+  isoDay,
   plannedTaskIdsForToday,
+  ScheduledTaskFields,
   resolveInsideVault,
 } from './daily-note';
 import { planDailyNote, DailyPlanTask, INBOX_PROJECT_ID } from './daily-plan';
@@ -93,7 +95,13 @@ export const runDailyNoteDryRun = async (
     for (const nt of newTasks) {
       log.log(`  + note → SP "${nt.title}"${cfg.dryRun ? ' (dry-run)' : ''}`);
       if (cfg.dryRun) continue;
-      const id = await PluginAPI.addTask({ title: nt.title, isDone: nt.isDone });
+      // Scheduled for today (SP's Today view lists tasks whose dueDay is today).
+      const data: Parameters<typeof PluginAPI.addTask>[0] & ScheduledTaskFields = {
+        title: nt.title,
+        isDone: nt.isDone,
+        dueDay: isoDay(now),
+      };
+      const id = await PluginAPI.addTask(data);
       working[nt.lineIndex] = stampNewTaskLine(working[nt.lineIndex], id);
       created.push(id);
       createdTasks.push({ id, title: nt.title, isDone: nt.isDone });

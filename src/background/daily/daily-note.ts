@@ -43,6 +43,18 @@ export const formatDailyFilename = (format: string, date: Date): string =>
     .replace(/MM/g, pad2(date.getMonth() + 1))
     .replace(/DD/g, pad2(date.getDate()));
 
+/** Local date as an ISO day (YYYY-MM-DD), the format SP uses for dueDay. */
+export const isoDay = (date: Date): string => formatDailyFilename('YYYY-MM-DD', date);
+
+/**
+ * Scheduling field SP applies to tasks (upstream PluginCreateTaskData.dueDay).
+ * The installed @super-productivity/plugin-api 1.0.1 types do not declare it, so
+ * it is added here in one place instead of casting at each call site.
+ */
+export interface ScheduledTaskFields {
+  dueDay?: string | null;
+}
+
 /**
  * Vault-relative path of the daily note, e.g. "Daily/2026-10-21.md".
  * Throws if the folder or filename would escape the vault root.

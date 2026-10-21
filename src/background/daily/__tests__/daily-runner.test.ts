@@ -187,7 +187,7 @@ describe('runDailyNoteDryRun', () => {
       addTask,
     };
     await runDailyNoteDryRun({ ...cfg, dryRun: false }, deps, NOW);
-    expect(addTask).toHaveBeenCalledWith({ title: 'Neuer Task', isDone: false });
+    expect(addTask).toHaveBeenCalledWith({ title: 'Neuer Task', isDone: false, dueDay: '2026-10-21' });
     expect(mockedWrite).toHaveBeenCalledWith('/vault/Daily/2026-10-21.md', '## To Dos\n- [ ] <!--NEW1--> Neuer Task');
   });
 
