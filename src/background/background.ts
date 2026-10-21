@@ -5,6 +5,7 @@ import { fetchLatestRelease, isNewerVersion } from './update-check';
 import type { UpdateInfo } from './update-check';
 import { log } from '../shared/logger';
 import { runDailyNoteDryRun } from './daily/daily-runner';
+import { scheduleDailyNoteRun, cancelDailyNoteRun } from './daily/daily-scheduler';
 import { resolveDailyNoteCfg } from './daily/daily-note';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
@@ -470,6 +471,7 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
     unloadApi.onUnload(() => {
       clearInterval(updateCheckId);
       if (persistConfigTimer) clearTimeout(persistConfigTimer);
+      cancelDailyNoteRun();
       shutdownSyncRegistry();
       log.log('[sync-md-multi] onUnload: timers + sessions torn down');
     });
@@ -480,6 +482,10 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
   // projectListUpdate: fired when the user adds, renames, or removes a project.
   // Refresh the cache so the fallback path in loadProjects() has up-to-date data.
   PluginAPI.registerHook('projectListUpdate' as any, () => void refreshProjectsCache());
+
+  // Daily notes: re-run after task edits (debounced). Gated by daily.enabled in
+  // the runner, so this is a no-op while the feature is off.
+  PluginAPI.registerHook('taskUpdate' as any, () => scheduleDailyNoteRun(() => resolveDailyNoteCfg(currentConfig.daily)));
 
   // ── Project list cache (non-critical → fire-and-forget) ───────────────────
   // Only populates the iframe dropdown; must NOT block the detection wiring
