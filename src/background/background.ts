@@ -13,6 +13,7 @@ import { validateProjectsDirCfg, resolveProjectsDirCfg } from './projects/projec
 import { computeEffectiveBindings } from './projects/effective-bindings';
 import { listSubfolders, renameSubfolder } from './helper/file-utils';
 import { planRenames } from './projects/rename';
+import { migrateManualBindings } from './projects/migrate-bindings';
 import { effectiveVaultPath, validateVaultPath } from './vault';
 import { folderListChanged } from './projects/folder-poll';
 import { buildLinkTable, ignoreRow, unignoreRow } from './projects/link-table';
@@ -379,6 +380,24 @@ const handleCreateLinkSide = async (message: any): Promise<{ success: boolean; e
   }
 };
 
+// One-time move of saved manual bindings into folder binds. Bindings whose file is
+// inside the projects folder become binds; the rest are kept so nothing stops syncing.
+const migrateBindingsOnce = (): void => {
+  const dirCfg = resolveProjectsDirCfg(currentConfig.projectsDir);
+  const vault = effectiveVaultPath(currentConfig);
+  if (!vault || (currentConfig.bindings ?? []).length === 0) return;
+  const absDir = `${vault.replace(/[\\/]+$/, '')}/${dirCfg.projectsDir}`;
+  const { folderBinds, kept } = migrateManualBindings(currentConfig.bindings, absDir);
+  if (Object.keys(folderBinds).length === 0) return;
+  currentConfig = {
+    ...currentConfig,
+    bindings: kept,
+    projectsDir: { ...dirCfg, folderBinds: { ...(dirCfg.folderBinds ?? {}), ...folderBinds } },
+  };
+  persistConfig();
+  log.log(`migrated ${Object.keys(folderBinds).length} binding(s) into project folder binds; ${kept.length} kept`);
+};
+
 const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
   try {
     const newBindingsJson = JSON.stringify(incoming?.bindings ?? []);
@@ -588,6 +607,7 @@ const dailyDeps = () => ({
     log.error('daily dry-run failed', err),
   );
 
+  migrateBindingsOnce();
   activeBindingsJson = JSON.stringify(currentConfig?.bindings ?? []);
   if (resolveProjectsDirCfg(currentConfig.projectsDir).enabled || (currentConfig?.bindings?.length ?? 0) > 0) {
     await startBindings();
