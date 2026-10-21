@@ -15,6 +15,9 @@ export interface DailyNoteCfg {
   includeInbox: boolean;
   // Absolute vault root. Every daily-note path must resolve inside it.
   vaultRoot: string;
+  // Delete the SP task when its plugin-written line is removed from the note.
+  // Off by default; deletes only run in write mode.
+  deleteRemoved: boolean;
 }
 
 export const DEFAULT_DAILY_NOTE_CFG: DailyNoteCfg = {
@@ -24,6 +27,7 @@ export const DEFAULT_DAILY_NOTE_CFG: DailyNoteCfg = {
   filenameFormat: 'YYYY-MM-DD',
   includeInbox: true,
   vaultRoot: '',
+  deleteRemoved: false,
 };
 
 // SP's virtual "Today" tag ID. Observed in the SP 19.2.0 bundle; not yet

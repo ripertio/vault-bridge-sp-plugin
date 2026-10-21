@@ -6,7 +6,7 @@ import { generateTaskOperations } from './generate-task-operations';
  * Run one batch of operations through SP and throw on failure.
  * Extracted so mdToSp can issue two ordered batches (see below).
  */
-const applyBatch = async (
+export const applyBatch = async (
   projectId: string,
   operations: ReturnType<typeof generateTaskOperations>,
 ): Promise<void> => {
