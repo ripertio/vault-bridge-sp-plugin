@@ -9,6 +9,7 @@ import { scheduleDailyNoteRun, cancelDailyNoteRun, startDailyNoteWatcher, stopDa
 import { startFileWatcher } from './sync/file-watcher';
 import { resolveDailyNoteCfg } from './daily/daily-note';
 import { validateDailySettings } from './daily/daily-settings';
+import { validateProjectsDirCfg } from './projects/project-dir';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
 declare const __PLUGIN_VERSION__: string;
@@ -233,6 +234,7 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
       _latestUrl: currentConfig._latestUrl,
       // Bindings saves keep the stored daily settings; daily is saved via saveDailySettings.
       daily: currentConfig.daily,
+      projectsDir: currentConfig.projectsDir,
       _dailyBaseline: currentConfig._dailyBaseline,
     };
     persistConfig();
@@ -447,6 +449,13 @@ const dailyDeps = () => ({
       if (type === 'saveConfig') {
         applyConfigFromUi(message.config as LocalUserCfgV2);
         return { success: true };
+      }
+      if (type === 'saveProjectsDir') {
+        const result = validateProjectsDirCfg(message.projectsDir ?? {});
+        if (!result.ok) return { success: false, error: result.error };
+        currentConfig = { ...currentConfig, projectsDir: result.cfg };
+        persistConfig();
+        return { success: true, projectsDir: result.cfg };
       }
       if (type === 'saveDailySettings') {
         const result = validateDailySettings(message.daily ?? {});
