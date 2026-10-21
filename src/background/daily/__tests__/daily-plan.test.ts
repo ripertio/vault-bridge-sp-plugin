@@ -66,3 +66,16 @@ describe('planDailyNote', () => {
     expect(lines).toEqual(['## To Dos']);
   });
 });
+
+describe('planDailyNote write output', () => {
+  it('joins nextLines with newlines and keeps the trailing newline state', () => {
+    const result = planDailyNote(cfg, ['## To Dos', ''], [proj]);
+    expect(result.nextLines.join('\n')).toBe('## To Dos\n- [x] <!--p1--> Project task\n');
+  });
+
+  it('returns no changes when nothing is missing', () => {
+    const lines = ['## To Dos', '- [x] <!--p1--> Project task'];
+    const result = planDailyNote(cfg, lines, [proj]);
+    expect(result.nextLines.join('\n')).toBe(lines.join('\n'));
+  });
+});

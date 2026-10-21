@@ -1,4 +1,4 @@
-import { readTasksFile } from '../helper/file-utils';
+import { readTasksFile, writeTasksFile } from '../helper/file-utils';
 import { log } from '../../shared/logger';
 import {
   DailyNoteCfg,
@@ -29,9 +29,25 @@ export const runDailyNoteDryRun = async (cfg: DailyNoteCfg, now: Date = new Date
     .map((t) => ({ id: t.id, title: t.title, isDone: t.isDone, projectId: t.projectId }));
 
   const content = await readTasksFile(notePath);
-  const lines = content === null ? [] : content.split('\n');
+  if (content === null) {
+    log.log(`daily note missing, not created: ${notePath}`);
+    return;
+  }
+  const lines = content.split('\n');
   const result = planDailyNote(cfg, lines, planned);
 
-  log.log(`daily dry-run ${notePath} (note ${content === null ? 'missing' : 'found'})`);
+  log.log(`daily ${cfg.dryRun ? 'dry-run' : 'sync'} ${notePath}`);
   result.logLines.forEach((line) => log.log(line));
+
+  if (cfg.dryRun || result.missingTaskIds.length === 0) return;
+
+  // Re-read right before writing: if the user edited the note since the plan was
+  // computed, skip this write rather than overwrite their change.
+  const current = await readTasksFile(notePath);
+  if (current !== content) {
+    log.log('daily note changed during planning, skipping write');
+    return;
+  }
+  await writeTasksFile(notePath, result.nextLines.join('\n'));
+  log.log(`daily note updated: +${result.missingTaskIds.length} task(s)`);
 };

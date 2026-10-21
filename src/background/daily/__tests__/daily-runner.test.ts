@@ -59,10 +59,49 @@ describe('runDailyNoteDryRun', () => {
     expect(log.log).toHaveBeenCalledWith('would add 1 task(s) to ## To Dos');
   });
 
-  it('never writes a file or mutates SP', async () => {
+  it('does not write in dry-run mode even when tasks are missing', async () => {
+    setSp(['p1']);
+    await runDailyNoteDryRun({ ...cfg, dryRun: true }, NOW);
+    expect(mockedWrite).not.toHaveBeenCalled();
+  });
+
+  it('appends missing tasks when dryRun is false', async () => {
+    setSp(['p1']);
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, NOW);
+    expect(mockedWrite).toHaveBeenCalledTimes(1);
+    expect(mockedWrite).toHaveBeenCalledWith(
+      '/vault/Daily/2026-10-21.md',
+      '## To Dos\n- [ ] <!--p1--> Project task\n',
+    );
+  });
+
+  it('does not write when nothing is missing', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [x] <!--p1--> Project task');
+    setSp(['p1']);
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, NOW);
+    expect(mockedWrite).not.toHaveBeenCalled();
+  });
+
+  it('skips the write when the note changed during planning', async () => {
+    mockedRead
+      .mockResolvedValueOnce('## To Dos\n')
+      .mockResolvedValueOnce('## To Dos\nuser edit\n');
+    setSp(['p1']);
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, NOW);
+    expect(mockedWrite).not.toHaveBeenCalled();
+    expect(log.log).toHaveBeenCalledWith('daily note changed during planning, skipping write');
+  });
+
+  it('never creates a missing note', async () => {
+    mockedRead.mockResolvedValue(null);
+    setSp(['p1']);
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, NOW);
+    expect(mockedWrite).not.toHaveBeenCalled();
+  });
+
+  it('never mutates SP tasks', async () => {
     setSp(['p1', 'i1']);
     await runDailyNoteDryRun(cfg, NOW);
-    expect(mockedWrite).not.toHaveBeenCalled();
     const api = (global as any).PluginAPI;
     expect(api.getTasks).toHaveBeenCalled();
     expect(api.updateTask).toBeUndefined();

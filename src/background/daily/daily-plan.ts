@@ -41,7 +41,12 @@ export const planDailyNote = (
 
   const nextLines = [...withSection];
   if (section && newLines.length > 0) {
-    nextLines.splice(section.bodyEnd, 0, ...newLines);
+    // Insert after the last non-blank body line so trailing blank lines stay put.
+    let insertAt = section.bodyEnd;
+    while (insertAt > section.bodyStart && withSection[insertAt - 1].trim() === '') {
+      insertAt--;
+    }
+    nextLines.splice(insertAt, 0, ...newLines);
   }
 
   const logLines = [
