@@ -77,6 +77,9 @@
       .modal-overlay.open { display: flex; }
       .modal-panel { background: #1e1e1e; color: #e8e8e8; border: 1px solid #555; border-radius: 8px; width: 460px; max-width: 92vw; padding: 18px 20px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); }
       .modal-panel h3 { margin: 0 0 8px; }
+      /* Daily Notes checkboxes: inline with their label, not stacked full-width. */
+      #dailyCard label:has(input[type="checkbox"]) { display: flex; align-items: center; gap: 8px; color: var(--text-color, #eee); font-weight: normal; }
+      #dailyCard input[type="checkbox"] { width: auto; margin: 0; }
       .modal-panel p { margin: 0 0 16px; font-size: 0.9em; color: #bbb; }
       .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
       .btn-danger-outline { background: transparent !important; border: 1px solid #dc3545 !important; color: #dc3545 !important; }
@@ -123,6 +126,42 @@
         </form>
       </div>
 
+      <div class="card" id="dailyCard">
+        <h3>Daily Notes</h3>
+        <p class="file-hint">Writes today's note with tasks planned for today. Everything is OFF until you enable it.</p>
+        <form id="dailyForm">
+          <div class="form-group">
+            <label><input type="checkbox" id="dailyEnabled" /> Enable daily notes</label>
+          </div>
+          <div class="form-group">
+            <label><input type="checkbox" id="dailyWrite" /> Write to the note (off = dry-run, log only)</label>
+          </div>
+          <div class="form-group">
+            <label><input type="checkbox" id="dailyDelete" /> Delete the SP task when its line is removed from the note</label>
+          </div>
+          <div class="form-group">
+            <label for="dailyVault">Vault folder</label>
+            <div class="file-input-row">
+              <input type="text" id="dailyVault" placeholder="/path/to/your/vault" />
+              <button type="button" class="btn btn-outline" id="dailyVaultBrowse">Browse…</button>
+            </div>
+            <span class="file-hint">Absolute path. Every daily note must stay inside this folder.</span>
+          </div>
+          <div class="form-group">
+            <label for="dailyFolder">Daily notes folder (inside the vault)</label>
+            <input type="text" id="dailyFolder" placeholder="Daily" />
+          </div>
+          <div class="form-group">
+            <label for="dailyFormat">Filename format</label>
+            <input type="text" id="dailyFormat" placeholder="YYYY-MM-DD" />
+            <span class="file-hint">Tokens: YYYY, MM, DD. Preview today: <code id="dailyPreview"></code></span>
+          </div>
+          <div class="actions">
+            <button type="submit" class="btn btn-primary" id="dailySaveBtn">Save Daily Notes</button>
+          </div>
+        </form>
+      </div>
+
       <div id="status" class="status"></div>
 
       <footer class="app-footer">
@@ -139,6 +178,7 @@
         <div class="fb-header">
           <button class="btn btn-outline" id="fbUpBtn" style="padding:4px 10px;font-size:0.85em;">↑ Up</button>
           <span class="fb-path" id="fbPath">/</span>
+          <button class="btn btn-primary" id="fbUseFolderBtn" style="padding:4px 10px;font-size:0.85em;display:none;">Use this folder</button>
           <button class="btn btn-outline" id="fbCloseBtn" style="padding:4px 10px;font-size:0.85em;">✕</button>
         </div>
         <div class="fb-list" id="fbList">
@@ -293,6 +333,7 @@
             // Seed the projects array from cache so loadProjects() has something to
             // fall back to if getAllProjects() returns only Inbox.
             projects = data._cachedProjects || [];
+            loadDailyForm(data.daily || {});
           }
 
           // Load the project dropdown (with direct API call + cache fallback + retry)
@@ -696,7 +737,7 @@
                   const full = path.join(dir, e.name);
                   const isDir = e.isDirectory();
                   const isMd = !isDir && /\\.md$/i.test(e.name);
-                  if (isDir || isMd) {
+                  if (isDir || (isMd && !args[1])) {
                     items.push({ name: e.name, isDir, path: full });
                   }
                 }
@@ -716,7 +757,7 @@
                 return { success: false, error: e.message };
               }
             `,
-            args: [dirPath || ''],
+            args: [dirPath || '', fbFolderMode],
             timeout: 5000,
           });
           result = r && r.result;
@@ -769,7 +810,31 @@
         });
       }
 
+      // Folder mode: the browser picks a directory (no .md files) for `fbTarget`.
+      let fbFolderMode = false;
+      let fbTarget = null;
+
+      function fbOpenFolder(targetInputId) {
+        fbFolderMode = true;
+        fbTarget = targetInputId;
+        document.getElementById('fbUseFolderBtn').style.display = 'inline-block';
+        const existing = document.getElementById(targetInputId).value.trim();
+        fbOpenAt(existing);
+      }
+
+      function fbOpenAt(startDir) {
+        document.getElementById('fbOverlay').classList.add('open');
+        fbLoadDir(startDir || '');
+      }
+
+      function fbResetMode() {
+        fbFolderMode = false;
+        fbTarget = null;
+        document.getElementById('fbUseFolderBtn').style.display = 'none';
+      }
+
       function fbOpen() {
+        fbResetMode();
         document.getElementById('fbOverlay').classList.add('open');
         // Start from the directory of any already-entered path, or home
         const existingPath = document.getElementById('filePath').value.trim();
@@ -784,9 +849,18 @@
 
       function fbClose() {
         document.getElementById('fbOverlay').classList.remove('open');
+        fbResetMode();
       }
 
       document.getElementById('browseBtn').addEventListener('click', fbOpen);
+      document.getElementById('dailyVaultBrowse').addEventListener('click', () => fbOpenFolder('dailyVault'));
+      document.getElementById('fbUseFolderBtn').addEventListener('click', () => {
+        if (fbTarget && fbCurrentDir) {
+          document.getElementById(fbTarget).value = fbCurrentDir;
+          updateDailyPreview();
+        }
+        fbClose();
+      });
       document.getElementById('fbCloseBtn').addEventListener('click', fbClose);
       document.getElementById('fbUpBtn').addEventListener('click', () => {
         if (!fbCurrentDir) return;
@@ -820,6 +894,52 @@
       });
 
       // ── Init ────────────────────────────────────────────────────────────────
+      // ── Daily Notes ─────────────────────────────────────────────────────────
+      // Defaults mirror DEFAULT_DAILY_NOTE_CFG in the background (all OFF).
+      const DAILY_DEFAULTS = { folder: 'Daily', filenameFormat: 'YYYY-MM-DD' };
+
+      function loadDailyForm(d) {
+        document.getElementById('dailyEnabled').checked = !!d.enabled;
+        document.getElementById('dailyWrite').checked = d.dryRun === false;
+        document.getElementById('dailyDelete').checked = !!d.deleteRemoved;
+        document.getElementById('dailyVault').value = d.vaultRoot || '';
+        document.getElementById('dailyFolder').value = d.folder ?? DAILY_DEFAULTS.folder;
+        document.getElementById('dailyFormat').value = d.filenameFormat || DAILY_DEFAULTS.filenameFormat;
+        updateDailyPreview();
+      }
+
+      // Show today's filename with the current format, so a typo is visible before saving.
+      function updateDailyPreview() {
+        const fmt = document.getElementById('dailyFormat').value.trim() || DAILY_DEFAULTS.filenameFormat;
+        const d = new Date();
+        const pad = (n) => String(n).padStart(2, '0');
+        const preview = fmt
+          .replace(/YYYY/g, String(d.getFullYear()))
+          .replace(/MM/g, pad(d.getMonth() + 1))
+          .replace(/DD/g, pad(d.getDate()));
+        document.getElementById('dailyPreview').textContent = preview + '.md';
+      }
+      document.getElementById('dailyFormat').addEventListener('input', updateDailyPreview);
+
+      document.getElementById('dailyForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const daily = {
+          enabled: document.getElementById('dailyEnabled').checked,
+          dryRun: !document.getElementById('dailyWrite').checked,
+          deleteRemoved: document.getElementById('dailyDelete').checked,
+          vaultRoot: document.getElementById('dailyVault').value.trim(),
+          folder: document.getElementById('dailyFolder').value.trim(),
+          filenameFormat: document.getElementById('dailyFormat').value.trim(),
+        };
+        try {
+          const res = await sendMessage({ type: 'saveDailySettings', daily });
+          if (!res || !res.success) throw new Error((res && res.error) || 'no response from background');
+          showStatus('Daily notes settings saved', 'success');
+        } catch (err) {
+          showStatus('Error saving daily notes: ' + (err.message || err), 'error');
+        }
+      });
+
       async function init() {
         let attempts = 0;
         while (typeof PluginAPI === 'undefined' && attempts < 20) {
