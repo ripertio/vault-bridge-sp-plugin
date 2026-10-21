@@ -274,6 +274,18 @@ const startBindings = async (): Promise<void> => {
   initSyncRegistry(result.bindings, currentConfig._lastSynced ?? {});
 };
 
+// projectListUpdate can fire several times in a row (e.g. while SP is busy). One
+// run after a short quiet period avoids duplicate project creation attempts.
+let projectsSyncTimer: ReturnType<typeof setTimeout> | null = null;
+const PROJECTS_SYNC_DEBOUNCE_MS = 1500;
+const scheduleProjectsSync = (): void => {
+  if (projectsSyncTimer) clearTimeout(projectsSyncTimer);
+  projectsSyncTimer = setTimeout(() => {
+    projectsSyncTimer = null;
+    void startBindings();
+  }, PROJECTS_SYNC_DEBOUNCE_MS);
+};
+
 const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
   try {
     const newBindingsJson = JSON.stringify(incoming?.bindings ?? []);
@@ -562,6 +574,7 @@ const dailyDeps = () => ({
       clearInterval(updateCheckId);
       if (persistConfigTimer) clearTimeout(persistConfigTimer);
       cancelDailyNoteRun();
+      if (projectsSyncTimer) clearTimeout(projectsSyncTimer);
       stopDailyNoteWatcher();
       shutdownSyncRegistry();
       log.log('[sync-md-multi] onUnload: timers + sessions torn down');
@@ -572,7 +585,11 @@ const dailyDeps = () => ({
 
   // projectListUpdate: fired when the user adds, renames, or removes a project.
   // Refresh the cache so the fallback path in loadProjects() has up-to-date data.
-  PluginAPI.registerHook('projectListUpdate' as any, () => void refreshProjectsCache());
+  PluginAPI.registerHook('projectListUpdate' as any, () => {
+    void refreshProjectsCache();
+    // Auto mode: a new SP project should get its folder + backlog.md without a restart.
+    if (resolveProjectsDirCfg(currentConfig.projectsDir).enabled) scheduleProjectsSync();
+  });
 
   // Daily notes: re-run after task edits (debounced). Gated by daily.enabled in
   // the runner, so this is a no-op while the feature is off.
