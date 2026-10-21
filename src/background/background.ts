@@ -13,6 +13,8 @@ import { validateProjectsDirCfg, resolveProjectsDirCfg } from './projects/projec
 import { computeEffectiveBindings } from './projects/effective-bindings';
 import { listSubfolders, renameSubfolder } from './helper/file-utils';
 import { planRenames } from './projects/rename';
+import { folderListChanged } from './projects/folder-poll';
+import { lazySetInterval } from './helper/lazy-set-interval';
 import { spToMd } from './sync/sp-to-md';
 import { createSpProject } from './sync/missing-resource';
 import { planReconcile } from './projects/reconcile';
@@ -315,6 +317,34 @@ const scheduleProjectsSync = (): void => {
   }, PROJECTS_SYNC_DEBOUNCE_MS);
 };
 
+// Vault → SP renames have no event, so the folder list is polled in auto mode. A
+// sync runs only when the folder names change, not on every tick.
+const PROJECTS_FOLDER_POLL_MS = 3000;
+let stopFolderPoll: (() => void) | null = null;
+let lastFolderList: string[] | null = null;
+const startFolderPoll = (): void => {
+  stopFolderPoll?.();
+  stopFolderPoll = null;
+  lastFolderList = null;
+  const cfg = resolveProjectsDirCfg(currentConfig.projectsDir);
+  const vaultPath = currentConfig.daily?.vaultPath ?? '';
+  if (!cfg.enabled || !vaultPath) return;
+  const absDir = `${vaultPath.replace(/[\\/]+$/, '')}/${cfg.projectsDir}`;
+  stopFolderPoll = lazySetInterval(async () => {
+    try {
+      const folders = await listSubfolders(absDir);
+      if (folderListChanged(lastFolderList, folders)) {
+        lastFolderList = folders;
+        await startBindings();
+      } else {
+        lastFolderList = folders;
+      }
+    } catch {
+      /* folder not readable right now — try again on the next tick */
+    }
+  }, PROJECTS_FOLDER_POLL_MS);
+};
+
 const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
   try {
     const newBindingsJson = JSON.stringify(incoming?.bindings ?? []);
@@ -521,6 +551,7 @@ const dailyDeps = () => ({
   if (resolveProjectsDirCfg(currentConfig.projectsDir).enabled || (currentConfig?.bindings?.length ?? 0) > 0) {
     await startBindings();
   }
+  startFolderPoll();
 
   // ── Config bridge (iframe UI ↔ background) ────────────────────────────────
   // The sandboxed config panel (src/ui/index.html) runs in a different context and
@@ -554,6 +585,7 @@ const dailyDeps = () => ({
         // Auto mode changes which bindings run, so restart the registry now.
         log.log('Projects settings saved — restarting sync registry');
         void startBindings();
+        startFolderPoll();
         return { success: true, projectsDir: result.cfg };
       }
       if (type === 'saveDailySettings') {
@@ -604,6 +636,7 @@ const dailyDeps = () => ({
       if (persistConfigTimer) clearTimeout(persistConfigTimer);
       cancelDailyNoteRun();
       if (projectsSyncTimer) clearTimeout(projectsSyncTimer);
+      stopFolderPoll?.();
       stopDailyNoteWatcher();
       shutdownSyncRegistry();
       log.log('[sync-md-multi] onUnload: timers + sessions torn down');
