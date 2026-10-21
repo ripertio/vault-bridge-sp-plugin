@@ -1,3 +1,5 @@
+import type { DailyNoteCfg } from './daily/daily-note';
+
 export interface SyncBindingCfg {
   id: string;
   filePath: string;
@@ -32,6 +34,9 @@ export interface LocalUserCfgV2 {
   _lastUpdateCheck?: string;
   _latestVersion?: string;
   _latestUrl?: string;
+  // Daily-note settings. Optional so existing configs stay valid; absent means
+  // the defaults in daily/daily-note.ts (feature OFF, dry-run ON).
+  daily?: Partial<DailyNoteCfg>;
 }
 
 // Legacy interface for migration

@@ -43,6 +43,16 @@ describe('device-local config store', () => {
     expect(loadLocalConfig()).toEqual(cfg);
   });
 
+  it('round-trips daily-note settings unchanged', () => {
+    const cfg: LocalUserCfgV2 = {
+      version: 2,
+      bindings: [],
+      daily: { enabled: true, dryRun: true, folder: 'Daily', filenameFormat: 'YYYY-MM-DD', includeInbox: false },
+    };
+    saveLocalConfig(cfg);
+    expect(loadLocalConfig()).toEqual(cfg);
+  });
+
   it('does NOT touch any synced-storage API (device-local by construction)', () => {
     const persistDataSynced = jest.fn();
     (global as any).PluginAPI = { persistDataSynced };

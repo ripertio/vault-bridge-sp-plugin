@@ -5,6 +5,7 @@ import {
   findToDosSection,
   formatDailyFilename,
   plannedTaskIdsForToday,
+  resolveDailyNoteCfg,
 } from '../daily-note';
 
 const OCT_21 = new Date(2026, 9, 21);
@@ -108,5 +109,17 @@ describe('ensureToDosSection', () => {
     const lines = ['# Day'];
     ensureToDosSection(lines);
     expect(lines).toEqual(['# Day']);
+  });
+});
+
+describe('resolveDailyNoteCfg', () => {
+  it('returns the safe defaults when nothing is stored', () => {
+    expect(resolveDailyNoteCfg(undefined)).toEqual(DEFAULT_DAILY_NOTE_CFG);
+  });
+
+  it('keeps stored values and fills the rest from defaults', () => {
+    const cfg = resolveDailyNoteCfg({ enabled: true, folder: 'Journal' });
+    expect(cfg).toEqual({ ...DEFAULT_DAILY_NOTE_CFG, enabled: true, folder: 'Journal' });
+    expect(cfg.dryRun).toBe(true);
   });
 });

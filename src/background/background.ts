@@ -226,6 +226,7 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
       _lastUpdateCheck: currentConfig._lastUpdateCheck,
       _latestVersion: currentConfig._latestVersion,
       _latestUrl: currentConfig._latestUrl,
+      daily: currentConfig.daily,
     };
     persistConfig();
     if (bindingsChanged) {

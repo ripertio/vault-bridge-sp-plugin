@@ -91,3 +91,9 @@ export const ensureToDosSection = (lines: string[]): string[] => {
   out.push(TODOS_HEADING);
   return out;
 };
+
+/** Merge stored (possibly partial) daily settings over the safe defaults. */
+export const resolveDailyNoteCfg = (stored?: Partial<DailyNoteCfg>): DailyNoteCfg => ({
+  ...DEFAULT_DAILY_NOTE_CFG,
+  ...(stored ?? {}),
+});
