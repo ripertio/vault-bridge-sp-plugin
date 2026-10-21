@@ -15,6 +15,8 @@ import { listSubfolders, renameSubfolder } from './helper/file-utils';
 import { planRenames } from './projects/rename';
 import { effectiveVaultPath, validateVaultPath } from './vault';
 import { folderListChanged } from './projects/folder-poll';
+import { buildLinkTable, ignoreRow, unignoreRow } from './projects/link-table';
+import { validFolderName } from './projects/project-dir';
 import { lazySetInterval } from './helper/lazy-set-interval';
 import { spToMd } from './sync/sp-to-md';
 import { createSpProject } from './sync/missing-resource';
@@ -595,6 +597,60 @@ const dailyDeps = () => ({
         void startBindings();
         startFolderPoll();
         return { success: true, projectsDir: result.cfg };
+      }
+      if (type === 'getLinkTable') {
+        const vault = effectiveVaultPath(currentConfig);
+        const dirCfg = resolveProjectsDirCfg(currentConfig.projectsDir);
+        if (!vault) return { success: false, error: 'Set the vault path first.' };
+        try {
+          const absDir = `${vault.replace(/[\\/]+$/, '')}/${dirCfg.projectsDir}`;
+          const folders = await listSubfolders(absDir);
+          const projects = (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title }));
+          return { success: true, rows: buildLinkTable(folders, projects, dirCfg.excluded) };
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : String(err) };
+        }
+      }
+      if (type === 'createLinkSide') {
+        // Create the missing side of one row, with the same helpers the sync uses.
+        // Write mode only: the daily write switch gates it, as everywhere else.
+        if (resolveDailyNoteCfg(currentConfig.daily).dryRun) {
+          return { success: false, error: 'Write mode is off. Turn on writes in Daily Notes to create.' };
+        }
+        const vault = effectiveVaultPath(currentConfig);
+        const dirCfg = resolveProjectsDirCfg(currentConfig.projectsDir);
+        const absDir = `${vault.replace(/[\\/]+$/, '')}/${dirCfg.projectsDir}`;
+        const name = String(message.name ?? '').trim();
+        try {
+          if (message.side === 'project') {
+            if (!validFolderName(name)) return { success: false, error: 'Invalid project name.' };
+            await createSpProject(name);
+            // The sync links it on the next run.
+          } else {
+            // Only an existing SP project may get a folder, looked up by ID here.
+            const projectId = String(message.projectId ?? '');
+            const project = (await PluginAPI.getAllProjects()).find((p) => p.id === projectId);
+            if (!project) return { success: false, error: 'SP project not found.' };
+            if (!validFolderName(name)) return { success: false, error: 'Invalid folder name.' };
+            await spToMd({ id: `create-${projectId}`, filePath: `${absDir}/${name}/backlog.md`, projectId, enabled: true, projectTitle: name });
+          }
+          void startBindings();
+          return { success: true };
+        } catch (err) {
+          return { success: false, error: err instanceof Error ? err.message : String(err) };
+        }
+      }
+      if (type === 'setLinkOverride') {
+        // Ignore/unignore changes the excluded list, which both sides already honour.
+        const dirCfg = resolveProjectsDirCfg(currentConfig.projectsDir);
+        const name = String(message.name ?? '').trim();
+        if (!name) return { success: false, error: 'Missing name.' };
+        const excluded = message.ignore ? ignoreRow(dirCfg.excluded, name) : unignoreRow(dirCfg.excluded, name);
+        currentConfig = { ...currentConfig, projectsDir: { ...dirCfg, excluded } };
+        persistConfig();
+        void startBindings();
+        startFolderPoll();
+        return { success: true, excluded };
       }
       if (type === 'saveVaultPath') {
         const result = validateVaultPath(message.path);

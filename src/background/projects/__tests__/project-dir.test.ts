@@ -1,5 +1,6 @@
 import {
   matchFoldersToProjects,
+  validFolderName,
   resolveProjectsDirCfg,
   validateProjectsDirCfg,
   DEFAULT_PROJECTS_DIR_CFG,
@@ -84,5 +85,17 @@ describe('matchFoldersToProjects', () => {
   it('ignores duplicate folder names', () => {
     const r = matchFoldersToProjects(['A', 'A'], [P('p1', 'A')], []);
     expect(r.matched).toHaveLength(1);
+  });
+});
+
+describe('validFolderName', () => {
+  it('accepts a plain name', () => {
+    expect(validFolderName('Neues Projekt')).toBe(true);
+  });
+
+  it('rejects separators, traversal and empty names', () => {
+    expect(validFolderName('a/b')).toBe(false);
+    expect(validFolderName('..')).toBe(false);
+    expect(validFolderName('')).toBe(false);
   });
 });

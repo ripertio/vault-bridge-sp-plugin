@@ -97,3 +97,7 @@ export const matchFoldersToProjects = (
   }
   return result;
 };
+
+/** A plain folder name: non-empty, no separators, not '.' or '..'. */
+export const validFolderName = (name: string): boolean =>
+  name.length > 0 && !/[\\/]/.test(name) && name !== '.' && name !== '..';

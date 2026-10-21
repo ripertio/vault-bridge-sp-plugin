@@ -199,6 +199,16 @@
         </form>
       </div>
 
+      <div class="card" id="linksCard">
+        <h3>Links</h3>
+        <p class="file-hint">Every folder in the projects folder and every SP project, with how they are matched. Ignore excludes a name on both sides.</p>
+        <div class="actions"><button type="button" class="btn btn-outline" id="linksRefreshBtn">Refresh</button></div>
+        <table class="links-table" id="linksTable" style="width:100%;border-collapse:collapse;margin-top:8px;">
+          <thead><tr><th style="text-align:left;">Name</th><th style="text-align:left;">Folder</th><th style="text-align:left;">SP project</th><th style="text-align:left;">State</th><th></th></tr></thead>
+          <tbody id="linksBody"><tr><td colspan="5" class="file-hint">Press Refresh to load.</td></tr></tbody>
+        </table>
+      </div>
+
       <div id="status" class="status"></div>
 
       <footer class="app-footer">
@@ -1040,6 +1050,88 @@
           showStatus('Error saving projects: ' + (err.message || err), 'error');
         }
       });
+
+      // ── Links (folder ↔ project table with overrides) ────────────────────────
+      const LINK_LABELS = {
+        linked: 'Linked',
+        'folder-only': 'Folder only',
+        'project-only': 'Project only',
+        excluded: 'Ignored',
+        ambiguous: 'Ambiguous (not synced)',
+      };
+
+      function renderLinks(rows) {
+        const body = document.getElementById('linksBody');
+        body.innerHTML = '';
+        if (!rows || rows.length === 0) {
+          body.innerHTML = '<tr><td colspan="5" class="file-hint">Nothing found in the projects folder or in SP.</td></tr>';
+          return;
+        }
+        rows.forEach((r) => {
+          const tr = document.createElement('tr');
+          const cell = (text) => { const td = document.createElement('td'); td.textContent = text; td.style.padding = '4px 6px'; return td; };
+          tr.append(cell(r.name), cell(r.folder || '—'), cell(r.projectTitle || '—'), cell(LINK_LABELS[r.state] || r.state));
+
+          const actions = document.createElement('td');
+          actions.style.padding = '4px 6px';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'btn btn-outline';
+          btn.style.padding = '2px 8px';
+          if (r.state === 'excluded') {
+            btn.textContent = 'Un-ignore';
+            btn.addEventListener('click', () => setLinkOverride(r.name, false));
+          } else {
+            btn.textContent = 'Ignore';
+            btn.addEventListener('click', () => setLinkOverride(r.name, true));
+          }
+          actions.appendChild(btn);
+          // Offer to create the missing side (the sync also does this in write mode).
+          if (r.state === 'folder-only' || r.state === 'project-only') {
+            const create = document.createElement('button');
+            create.type = 'button';
+            create.className = 'btn btn-outline';
+            create.style.padding = '2px 8px';
+            create.style.marginLeft = '4px';
+            create.textContent = r.state === 'folder-only' ? 'Create project' : 'Create folder';
+            create.addEventListener('click', async () => {
+              const res = await sendMessage({
+                type: 'createLinkSide',
+                side: r.state === 'folder-only' ? 'project' : 'folder',
+                name: r.name,
+                projectId: r.projectId,
+              });
+              if (!res || !res.success) showStatus('Create failed: ' + ((res && res.error) || 'no response'), 'error');
+              else { showStatus('Created', 'success'); await refreshLinks(); }
+            });
+            actions.appendChild(create);
+          }
+          tr.appendChild(actions);
+          body.appendChild(tr);
+        });
+      }
+
+      async function refreshLinks() {
+        const res = await sendMessage({ type: 'getLinkTable' });
+        if (!res || !res.success) {
+          showStatus('Links: ' + ((res && res.error) || 'no response'), 'error');
+          return;
+        }
+        renderLinks(res.rows);
+      }
+
+      async function setLinkOverride(name, ignore) {
+        const res = await sendMessage({ type: 'setLinkOverride', name, ignore });
+        if (!res || !res.success) {
+          showStatus('Link override failed: ' + ((res && res.error) || 'no response'), 'error');
+          return;
+        }
+        // Keep the Projects form in step with the excluded list it edits.
+        document.getElementById('projectsExcluded').value = res.excluded.join('\n');
+        await refreshLinks();
+      }
+
+      document.getElementById('linksRefreshBtn').addEventListener('click', refreshLinks);
 
       async function init() {
         let attempts = 0;
