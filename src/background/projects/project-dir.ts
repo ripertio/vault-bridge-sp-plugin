@@ -127,6 +127,9 @@ export const matchFoldersToProjects = (
     const hits = byTitle.get(folder) ?? [];
     if (hits.length === 1) result.matched.push({ folder, projectId: hits[0].id });
     else if (hits.length > 1) result.ambiguous.push(folder);
+    // The title belongs to a project that is bound to another folder. Creating a project
+    // with it would duplicate that project, so the folder is left alone.
+    else if (eligible.some((p) => p.title === folder)) result.ambiguous.push(folder);
     else result.foldersWithoutProject.push(folder);
   }
 

@@ -173,3 +173,12 @@ describe('validBindFile', () => {
     expect(validBindFile('')).toBe(false);
   });
 });
+
+describe('matchFoldersToProjects: a title held by a bound project', () => {
+  it('does not offer to create a project for a folder whose title is bound to another folder', () => {
+    const r = matchFoldersToProjects(['Sync Files SP', 'Sync Files'], [P('p1', 'Sync Files')], [], { 'Sync Files SP': 'p1' });
+    expect(r.matched).toEqual([{ folder: 'Sync Files SP', projectId: 'p1' }]);
+    expect(r.foldersWithoutProject).toEqual([]);
+    expect(r.ambiguous).toEqual(['Sync Files']);
+  });
+});
