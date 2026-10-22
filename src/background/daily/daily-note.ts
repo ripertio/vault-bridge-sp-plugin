@@ -21,6 +21,8 @@ export interface DailyNoteCfg {
   // Once per day, carry unfinished tasks from the last earlier note into today's
   // ## To Dos. Off by default; in dry-run it only logs what would be carried.
   rolloverOverdue: boolean;
+  // Heading line of the section tasks are added under, e.g. "## To Dos".
+  todosHeading: string;
 }
 
 export const DEFAULT_DAILY_NOTE_CFG: DailyNoteCfg = {
@@ -32,6 +34,7 @@ export const DEFAULT_DAILY_NOTE_CFG: DailyNoteCfg = {
   vaultPath: '',
   deleteRemoved: false,
   rolloverOverdue: false,
+  todosHeading: '## To Dos',
 };
 
 // SP's virtual "Today" tag ID. Observed in the SP 19.2.0 bundle; not yet
@@ -82,20 +85,32 @@ export const plannedTaskIdsForToday = (tags: { id: string; taskIds: string[] }[]
   return today ? [...today.taskIds] : [];
 };
 
-const TODOS_HEADING = '## To Dos';
+/**
+ * Heading line from user input: trimmed, and given `## ` when it has no `#` prefix.
+ * Empty input falls back to the default.
+ */
+export const normalizeTodosHeading = (input: string | undefined): string => {
+  const text = (input ?? '').trim();
+  if (!text) return DEFAULT_DAILY_NOTE_CFG.todosHeading;
+  return /^#{1,6}\s/.test(text) ? text.replace(/\s+/g, ' ') : `## ${text}`;
+};
 
 /**
- * Locate the `## To Dos` body: from the line after the heading up to (not
- * including) the next `## ` heading or end of file. Null when absent.
+ * Locate the To Dos body: from the line after the heading up to (not including)
+ * the next heading of the same or a higher level, or end of file. Null when absent.
  */
 export const findToDosSection = (
   lines: string[],
+  heading: string = DEFAULT_DAILY_NOTE_CFG.todosHeading,
 ): { headingIndex: number; bodyStart: number; bodyEnd: number } | null => {
-  const headingIndex = lines.findIndex((l) => l.trim() === TODOS_HEADING);
+  const wanted = normalizeTodosHeading(heading);
+  const level = wanted.indexOf(' ');
+  const headingIndex = lines.findIndex((l) => l.trim().replace(/\s+/g, ' ') === wanted);
   if (headingIndex === -1) return null;
+  const endsSection = new RegExp(`^#{1,${level}}\\s`);
   let bodyEnd = lines.length;
   for (let i = headingIndex + 1; i < lines.length; i++) {
-    if (/^##\s/.test(lines[i])) {
+    if (endsSection.test(lines[i])) {
       bodyEnd = i;
       break;
     }
@@ -107,11 +122,14 @@ export const findToDosSection = (
  * Return lines with `## To Dos` present, appending the heading when missing.
  * Existing content is never removed or reordered.
  */
-export const ensureToDosSection = (lines: string[]): string[] => {
-  if (findToDosSection(lines)) return [...lines];
+export const ensureToDosSection = (
+  lines: string[],
+  heading: string = DEFAULT_DAILY_NOTE_CFG.todosHeading,
+): string[] => {
+  if (findToDosSection(lines, heading)) return [...lines];
   const out = [...lines];
   if (out.length > 0 && out[out.length - 1].trim() !== '') out.push('');
-  out.push(TODOS_HEADING);
+  out.push(normalizeTodosHeading(heading));
   return out;
 };
 

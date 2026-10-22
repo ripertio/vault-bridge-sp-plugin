@@ -8,9 +8,13 @@ export const ROLLOVER_LOOKBACK_DAYS = 7;
  * IDs of unchecked task lines in a note's ## To Dos whose SP task still exists and
  * is not done. Pure: no I/O.
  */
-export const findOverdueIds = (lines: string[], spIsDone: Record<string, boolean>): Set<string> => {
+export const findOverdueIds = (
+  lines: string[],
+  spIsDone: Record<string, boolean>,
+  heading?: string,
+): Set<string> => {
   const ids = new Set<string>();
-  const section = findToDosSection(lines);
+  const section = findToDosSection(lines, heading);
   if (!section) return ids;
   for (let i = section.bodyStart; i < section.bodyEnd; i++) {
     const parsed = parseNoteTaskLine(lines[i]);

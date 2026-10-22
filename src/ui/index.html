@@ -135,6 +135,11 @@
             <label><input type="checkbox" id="dailyRollover" /> Roll unfinished tasks from the last note into today's note at midnight</label>
           </div>
           <div class="form-group">
+            <label for="dailyHeading">Heading for tasks in the note</label>
+            <input type="text" id="dailyHeading" placeholder="## To Dos" />
+            <span class="file-hint">Tasks are added under this heading. Without leading #, "## " is added. The section ends at the next heading of the same or a higher level.</span>
+          </div>
+          <div class="form-group">
             <label for="dailyFolder">Daily notes folder (inside the vault)</label>
             <div class="file-input-row">
               <input type="text" id="dailyFolder" placeholder="Daily" />
@@ -695,7 +700,7 @@
 
       // ── Daily Notes ─────────────────────────────────────────────────────────
       // Defaults mirror DEFAULT_DAILY_NOTE_CFG in the background (all OFF).
-      const DAILY_DEFAULTS = { folder: 'Daily', filenameFormat: 'YYYY-MM-DD' };
+      const DAILY_DEFAULTS = { folder: 'Daily', filenameFormat: 'YYYY-MM-DD', todosHeading: '## To Dos' };
 
       function loadDailyForm(d) {
         document.getElementById('dailyEnabled').checked = !!d.enabled;
@@ -703,6 +708,7 @@
         document.getElementById('dailyDelete').checked = !!d.deleteRemoved;
         document.getElementById('dailyRollover').checked = !!d.rolloverOverdue;
 
+        document.getElementById('dailyHeading').value = d.todosHeading || DAILY_DEFAULTS.todosHeading;
         document.getElementById('dailyFolder').value = d.folder ?? DAILY_DEFAULTS.folder;
         document.getElementById('dailyFormat').value = d.filenameFormat || DAILY_DEFAULTS.filenameFormat;
         updateDailyPreview();
@@ -728,6 +734,7 @@
           dryRun: !document.getElementById('dailyWrite').checked,
           deleteRemoved: document.getElementById('dailyDelete').checked,
           rolloverOverdue: document.getElementById('dailyRollover').checked,
+          todosHeading: document.getElementById('dailyHeading').value.trim(),
           folder: document.getElementById('dailyFolder').value.trim(),
           filenameFormat: document.getElementById('dailyFormat').value.trim(),
         };

@@ -1,4 +1,4 @@
-import { DailyNoteCfg, DEFAULT_DAILY_NOTE_CFG, resolveInsideVault, dailyNoteRelativePath } from './daily-note';
+import { DailyNoteCfg, DEFAULT_DAILY_NOTE_CFG, normalizeTodosHeading, resolveInsideVault, dailyNoteRelativePath } from './daily-note';
 
 export type DailySettingsResult =
   | { ok: true; cfg: DailyNoteCfg }
@@ -30,7 +30,13 @@ export const validateDailySettings = (input: Partial<DailyNoteCfg>): DailySettin
   }
   if (!format) return { ok: false, error: 'Filename format is required.' };
 
-  const normalized: DailyNoteCfg = { ...cfg, vaultPath, folder, filenameFormat: format };
+  const normalized: DailyNoteCfg = {
+    ...cfg,
+    vaultPath,
+    folder,
+    filenameFormat: format,
+    todosHeading: normalizeTodosHeading(cfg.todosHeading),
+  };
 
   // Build a sample path to run the same checks the runner will run.
   try {

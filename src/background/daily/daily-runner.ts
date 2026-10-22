@@ -160,7 +160,7 @@ const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): P
       });
     }
   }
-  const section = findToDosSection(working);
+  const section = findToDosSection(working, cfg.todosHeading);
   const created: string[] = [];
   const createdTasks: { id: string; title: string; isDone: boolean }[] = [];
   // Each new line before and after its ID is stamped, so the note can be re-stamped if it changed.
@@ -196,7 +196,7 @@ const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): P
       return readTasksFile(p);
     });
     if (previous) {
-      const overdueIds = findOverdueIds(previous.lines, spIsDone);
+      const overdueIds = findOverdueIds(previous.lines, spIsDone, cfg.todosHeading);
       const body = working.slice(section.bodyStart, section.bodyEnd).join('\n');
       const carried = tasks.filter((t) => overdueIds.has(t.id) && !body.includes(`<!--${t.id}-->`));
       for (const t of carried) {

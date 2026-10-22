@@ -1,4 +1,4 @@
-import { DailyNoteCfg, findToDosSection } from './daily-note';
+import { DailyNoteCfg, findToDosSection, normalizeTodosHeading } from './daily-note';
 
 // Inbox project ID observed in live SP task data (getTasks), not yet documented.
 export const INBOX_PROJECT_ID = 'INBOX_PROJECT';
@@ -37,14 +37,15 @@ export const planDailyNote = (
   // Never create a heading for existing notes. Only a completely empty note gets
   // the ## To Dos heading, so the first write has a place to go.
   const isEmpty = lines.every((l) => l.trim() === '');
-  const withSection = isEmpty ? ['## To Dos'] : [...lines];
-  const section = findToDosSection(withSection);
+  const heading = normalizeTodosHeading(cfg.todosHeading);
+  const withSection = isEmpty ? [heading] : [...lines];
+  const section = findToDosSection(withSection, heading);
   if (!section) {
     return {
       missingTaskIds: [],
       statusChangedTaskIds: [],
       nextLines: [...lines],
-      logLines: ['## To Dos not found, nothing added'],
+      logLines: [`${heading} not found, nothing added`],
     };
   }
   const bodyText = withSection.slice(section.bodyStart, section.bodyEnd).join('\n');
@@ -84,7 +85,7 @@ export const planDailyNote = (
   }
 
   const logLines = [
-    `would add ${missing.length} task(s) to ## To Dos`,
+    `would add ${missing.length} task(s) to ${heading}`,
     ...missing.map((t) => `  + ${t.id} ${t.title}`),
     `would update ${statusChanged.length} checkbox(es)`,
     ...statusChanged.map((id) => `  ~ ${id}`),
