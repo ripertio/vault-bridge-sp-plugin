@@ -99,6 +99,33 @@ export const runDailyNoteDryRun = async (
 
   // 1b) Create: task lines the user typed (no ID) become SP tasks in the Inbox.
   let working = [...lines];
+
+  // 1a2) SP delete → note: a line whose SP task is gone (deleted in the project file or in
+  // SP) goes too, so both places agree. Same opt-in as 1a. Skipped when the task list is
+  // empty, so a failed read cannot clear the note. Runs before creation, so new IDs are
+  // not mistaken for gone ones.
+  const liveIds = new Set(tasks.map((t) => t.id));
+  const goneIds = new Set<string>();
+  if (liveIds.size > 0) {
+    for (const line of working) {
+      const parsed = parseNoteTaskLine(line);
+      if (parsed && !liveIds.has(parsed.id)) goneIds.add(parsed.id);
+    }
+  }
+  let goneRemoved = 0;
+  if (goneIds.size > 0) {
+    log.log(`  - ${goneIds.size} note line(s) whose SP task is gone${cfg.dryRun ? ' (dry-run)' : ''}`);
+    if (cfg.deleteRemoved && !cfg.dryRun) {
+      goneRemoved = working.filter((l) => {
+        const parsed = parseNoteTaskLine(l);
+        return parsed !== null && goneIds.has(parsed.id);
+      }).length;
+      working = working.filter((l) => {
+        const parsed = parseNoteTaskLine(l);
+        return !(parsed && goneIds.has(parsed.id));
+      });
+    }
+  }
   const section = findToDosSection(working);
   const created: string[] = [];
   const createdTasks: { id: string; title: string; isDone: boolean }[] = [];
@@ -150,10 +177,19 @@ export const runDailyNoteDryRun = async (
 
   // 2) Forward: SP → note. In write mode, created tasks are not yet in the Today
   // tag, so they are not planned here; they are stamped with their ID above.
-  const result = planDailyNote(cfg, working, planned);
+  // Tasks already in ## To Dos also get their checkbox kept in step with SP, even when they
+  // are not planned for today (for example a rolled-over task). They are never re-added.
+  const bodyIds = section
+    ? new Set(working.slice(section.bodyStart, section.bodyEnd).flatMap((l) => parseNoteTaskLine(l)?.id ?? []))
+    : new Set<string>();
+  const inBody = tasks
+    .filter((t) => bodyIds.has(t.id) && !planned.some((p) => p.id === t.id))
+    .map((t) => ({ id: t.id, title: t.title, isDone: t.isDone, projectId: t.projectId }));
+  const result = planDailyNote(cfg, working, [...planned, ...inBody]);
   result.logLines.forEach((line) => log.log(line));
 
-  const changes = result.missingTaskIds.length + result.statusChangedTaskIds.length + created.length + carriedCount;
+  const changes =
+    result.missingTaskIds.length + result.statusChangedTaskIds.length + created.length + carriedCount + goneRemoved;
   if (cfg.dryRun) return;
   if (changes === 0) {
     if (rolloverDue) deps.saveRolloverDay?.(today);

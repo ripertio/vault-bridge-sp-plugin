@@ -392,3 +392,54 @@ describe('runDailyNoteDryRun rollover', () => {
     expect(mockedWrite).toHaveBeenCalled();
   });
 });
+
+describe('runDailyNoteDryRun mirrors SP deletes and checkboxes into the note', () => {
+  const setTasks = (tasks: { id: string; title: string; isDone: boolean; projectId: string }[], today: string[]) => {
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: today }]),
+      getTasks: jest.fn().mockResolvedValue(tasks),
+    };
+  };
+
+  it('removes a note line whose SP task is gone when deleteRemoved is on (write mode)', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--gone--> Old\n');
+    setTasks([{ id: 'p1', title: 'Project task', isDone: false, projectId: 'S3' }], ['p1']);
+    await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, deps, NOW);
+    expect(mockedWrite).toHaveBeenCalledWith(
+      '/vault/Daily/2026-10-21.md',
+      '## To Dos\n- [ ] <!--p1--> Project task\n',
+    );
+  });
+
+  it('keeps the note line when deleteRemoved is off', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--gone--> Old\n');
+    setTasks([{ id: 'p1', title: 'Project task', isDone: false, projectId: 'S3' }], ['p1']);
+    await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: false }, deps, NOW);
+    expect(mockedWrite).toHaveBeenCalledWith(
+      '/vault/Daily/2026-10-21.md',
+      '## To Dos\n- [ ] <!--gone--> Old\n- [ ] <!--p1--> Project task\n',
+    );
+  });
+
+  it('only logs the gone line in dry-run, even when deleteRemoved is on', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--gone--> Old\n');
+    setTasks([{ id: 'p1', title: 'Project task', isDone: false, projectId: 'S3' }], ['p1']);
+    await runDailyNoteDryRun({ ...cfg, dryRun: true, deleteRemoved: true }, deps, NOW);
+    expect(mockedWrite).not.toHaveBeenCalled();
+    expect(log.log).toHaveBeenCalledWith('  - 1 note line(s) whose SP task is gone (dry-run)');
+  });
+
+  it('removes nothing when the SP task list is empty (a failed read must not clear the note)', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--gone--> Old\n');
+    setTasks([], []);
+    await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, deps, NOW);
+    expect(mockedWrite).not.toHaveBeenCalled();
+  });
+
+  it('updates the checkbox of a note task that is not planned for today', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--other--> Not today\n');
+    setTasks([{ id: 'other', title: 'Not today', isDone: true, projectId: 'S3' }], []);
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, deps, NOW);
+    expect(mockedWrite).toHaveBeenCalledWith('/vault/Daily/2026-10-21.md', '## To Dos\n- [x] <!--other--> Not today\n');
+  });
+});
