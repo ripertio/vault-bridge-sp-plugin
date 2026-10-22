@@ -93,7 +93,7 @@ const refreshProjectsCache = async (): Promise<void> => {
     currentConfig._cachedProjects = cachedProjects;
     persistConfig();
   } catch (err) {
-    log.error('[sync-md-multi] Failed to cache projects:', err);
+    log.error('[sync-md] Failed to cache projects:', err);
   }
 };
 
@@ -162,7 +162,7 @@ const registerUpgradeButton = (info: UpdateInfo): void => {
     });
   } catch (err) {
     upgradeButtonRegistered = false;
-    log.error('[sync-md-multi] registerHeaderButton (upgrade) failed:', err);
+    log.error('[sync-md] registerHeaderButton (upgrade) failed:', err);
   }
 };
 
@@ -183,7 +183,7 @@ const surfaceUpdate = (info: UpdateInfo, isStartup: boolean): void => {
         ico: 'upgrade',
       });
     } catch (err) {
-      log.error('[sync-md-multi] update snack failed:', err);
+      log.error('[sync-md] update snack failed:', err);
     }
   }
 };
@@ -230,7 +230,7 @@ const maybeCheckForUpdate = async (isStartup = false): Promise<void> => {
     }
     persistConfigSoon();
   } catch (err) {
-    log.error('[sync-md-multi] update check error:', err);
+    log.error('[sync-md] update check error:', err);
   }
 };
 
@@ -544,11 +544,11 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
     };
     persistConfig();
     if (bindingsChanged) {
-      log.log('[sync-md-multi] Config saved from UI — restarting sync registry');
+      log.log('[sync-md] Config saved from UI — restarting sync registry');
       void startBindings();
     }
   } catch (err) {
-    log.error('[sync-md-multi] Failed to apply config from UI:', err);
+    log.error('[sync-md] Failed to apply config from UI:', err);
   }
 };
 
@@ -595,7 +595,7 @@ const dailyDeps = () => ({
       },
     });
   } catch (err) {
-    log.error('[sync-md-multi] registerMenuEntry failed:', err);
+    log.error('[sync-md] registerMenuEntry failed:', err);
   }
 
   try {
@@ -608,7 +608,7 @@ const dailyDeps = () => ({
       },
     });
   } catch (err) {
-    log.error('[sync-md-multi] registerHeaderButton failed:', err);
+    log.error('[sync-md] registerHeaderButton failed:', err);
   }
 
   // ── Config bridge (sync layer → config owner) ────────────────────────────
@@ -722,13 +722,13 @@ const dailyDeps = () => ({
           _latestUrl: legacy._latestUrl,
         };
         persistConfig();
-        log.log('[sync-md-multi] Migrated config from synced storage to local storage');
+        log.log('[sync-md] Migrated config from synced storage to local storage');
       }
       // Clear the legacy synced blob so it stops propagating across devices.
       try {
         await PluginAPI.persistDataSynced('');
       } catch (err) {
-        log.error('[sync-md-multi] Failed to clear legacy synced config:', err);
+        log.error('[sync-md] Failed to clear legacy synced config:', err);
       }
     }
   } catch {
@@ -890,7 +890,7 @@ const dailyDeps = () => ({
       return { success: false, error: 'unknown message type' };
     });
   } else {
-    log.error('[sync-md-multi] onMessage unavailable — config panel cannot load/save');
+    log.error('[sync-md] onMessage unavailable — config panel cannot load/save');
   }
 
   // NOTE (v0.4.0): there is no more persistedDataChanged hook or 5 s config poll.
@@ -926,10 +926,10 @@ const dailyDeps = () => ({
       stopDailyNoteWatcher();
       stopDayChangeCheck();
       shutdownSyncRegistry();
-      log.log('[sync-md-multi] onUnload: timers + sessions torn down');
+      log.log('[sync-md] onUnload: timers + sessions torn down');
     });
   } else {
-    log.error('[sync-md-multi] onUnload not available — reloads may leave zombie timers');
+    log.error('[sync-md] onUnload not available — reloads may leave zombie timers');
   }
 
   // projectListUpdate: fired when the user adds, renames, or removes a project.

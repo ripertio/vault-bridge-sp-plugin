@@ -111,7 +111,7 @@ export const fetchLatestRelease = async (): Promise<UpdateInfo | null> => {
 
   const r = result.result as FetchResult;
   if (!result.success || !r?.success || !r.tagName) {
-    console.warn('[sync-md-multi] update check failed:', r?.error ?? toErrorMessage(result.error));
+    console.warn('[sync-md] update check failed:', r?.error ?? toErrorMessage(result.error));
     return null;
   }
   return {

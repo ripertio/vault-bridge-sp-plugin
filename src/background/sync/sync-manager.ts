@@ -206,7 +206,7 @@ export const initSyncRegistry = (
   const { unique, duplicates } = dedupeBindingsByCanonicalPath(bindings);
   duplicates.forEach(({ binding, owner }) => {
     log.error(
-      `[sync-md-multi] Binding ${binding.id} points at the same file as binding ${owner} ` +
+      `[sync-md] Binding ${binding.id} points at the same file as binding ${owner} ` +
         `("${binding.filePath}"). Skipping it — two bindings on one file corrupt each other.`,
     );
     PluginAPI.showSnack({
@@ -266,7 +266,7 @@ const runInitialSyncsSequentially = async (
       await performInitialSync(session);
     } catch (err) {
       log.error(
-        `[sync-md-multi] Unhandled error in performInitialSync for ${session.config.id}:`,
+        `[sync-md] Unhandled error in performInitialSync for ${session.config.id}:`,
         err,
       );
     }
@@ -483,7 +483,7 @@ const handleMissingProject = async (
               type: 'SUCCESS',
             });
           } catch (err) {
-            log.error(`[sync-md-multi] Recreate project failed for ${id}:`, err);
+            log.error(`[sync-md] Recreate project failed for ${id}:`, err);
             PluginAPI.showSnack({
               msg: `sync.md Multi: could not recreate the project for "${session.config.filePath}".`,
               type: 'ERROR',
@@ -515,7 +515,7 @@ const handleMissingProject = async (
                   ? ' + file cleaned'
                   : ' (file already clean)';
           } catch (err) {
-            log.error(`[sync-md-multi] Clean file failed for ${id}:`, err);
+            log.error(`[sync-md] Clean file failed for ${id}:`, err);
             cleanNote = " (couldn't clean file)";
           }
           disposeSession(session);
@@ -571,7 +571,7 @@ const divertIfProjectMissing = async (
     await handleMissingProject(session, proactive);
     return true;
   } catch (err) {
-    log.error('[sync-md-multi] project existence check failed:', err);
+    log.error('[sync-md] project existence check failed:', err);
     return false;
   }
 };
@@ -629,7 +629,7 @@ const performInitialSync = async (session: SyncSession): Promise<void> => {
       await markSynced(session);
     }
   } catch (error) {
-    log.error(`[sync-md-multi] Initial sync failed for ${session.config.id}:`, error);
+    log.error(`[sync-md] Initial sync failed for ${session.config.id}:`, error);
     PluginAPI.showSnack({
       msg: `Sync.md: Initial sync failed for "${session.config.filePath}". Plugin is still active.`,
       type: 'ERROR',
@@ -699,7 +699,7 @@ const executeMdToSpSync = async (session: SyncSession): Promise<void> => {
       await markSynced(session);
     }
   } catch (error) {
-    log.error(`[sync-md-multi] MD to SP sync failed for ${session.config.id}:`, error);
+    log.error(`[sync-md] MD to SP sync failed for ${session.config.id}:`, error);
     PluginAPI.showSnack({
       msg: `Sync.md: Sync failed for "${session.config.filePath}". Check markdown for formatting issues.`,
       type: 'WARNING',
@@ -738,7 +738,7 @@ const setupGlobalHooks = (): void => {
 
     if (isProjectMove) {
       // Task moved between projects — both origin and destination must sync.
-      log.log('[sync-md-multi] taskUpdate: project move detected — notifying all sessions');
+      log.log('[sync-md] taskUpdate: project move detected — notifying all sessions');
       sessions.forEach((session) => handleSpChange(session));
     } else if (taskProjectId) {
       // Normal edit — only notify the affected project's session.
@@ -818,7 +818,7 @@ const setupGlobalHooks = (): void => {
       sessions.forEach((session) => handleSpChange(session));
     });
   } catch (err) {
-    log.error('[sync-md-multi] could not register the "action" hook:', err);
+    log.error('[sync-md] could not register the "action" hook:', err);
   }
 };
 
@@ -1099,7 +1099,7 @@ export const syncAllNow = (): void => {
       await markSynced(session);
     })()
       .catch((error) => {
-        log.error(`[sync-md-multi] syncAllNow failed for ${session.config.id}:`, error);
+        log.error(`[sync-md] syncAllNow failed for ${session.config.id}:`, error);
         PluginAPI.showSnack({
           msg: `sync.md Multi: Manual sync failed for "${session.config.filePath}".`,
           type: 'ERROR',

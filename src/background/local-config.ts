@@ -80,7 +80,7 @@ export const loadLocalConfig = (): LocalUserCfgV2 => {
       
       // Migration logic: V1 to V2
       if (!parsed.version || parsed.version === 1 || (!parsed.bindings && parsed.filePath)) {
-        console.log('[sync-md-multi] Migrating legacy config to V2');
+        console.log('[sync-md] Migrating legacy config to V2');
         const legacy = parsed as LocalUserCfgV1;
         const migrated: LocalUserCfgV2 = {
           version: 2,
@@ -106,7 +106,7 @@ export const loadLocalConfig = (): LocalUserCfgV2 => {
       bindings: [],
     };
   } catch (error) {
-    console.error('[sync-md-multi] Failed to load config:', error);
+    console.error('[sync-md] Failed to load config:', error);
     return {
       version: 2,
       bindings: [],
@@ -118,6 +118,6 @@ export const saveLocalConfig = (config: LocalUserCfgV2): void => {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(config));
   } catch (error) {
-    console.error('[sync-md-multi] Failed to save config:', error);
+    console.error('[sync-md] Failed to save config:', error);
   }
 };
