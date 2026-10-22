@@ -143,7 +143,7 @@ const registerUpgradeButton = (info: UpdateInfo): void => {
   upgradeButtonRegistered = true;
   try {
     PluginAPI.registerHeaderButton({
-      label: `sync.md Multi: Update available (v${info.latestVersion})`,
+      label: `Vault Bridge: Update available (v${info.latestVersion})`,
       icon: 'upgrade',
       // SP renders header buttons neutral-gray regardless of this field (verified
       // primary/accent/warn all identical in 18.16); kept as the semantically
@@ -188,7 +188,7 @@ const surfaceUpdate = (info: UpdateInfo, isStartup: boolean): void => {
     startupSnackShown = true;
     try {
       PluginAPI.showSnack({
-        msg: `sync.md Multi: version ${info.latestVersion} available`,
+        msg: `Vault Bridge: version ${info.latestVersion} available`,
         type: 'INFO',
         ico: 'upgrade',
       });
@@ -394,7 +394,7 @@ const askAboutDeletedFolder = (deleted: DeletedFolder, title: string, writeMode:
     onRemoveProject: async () => {
       const api = PluginAPI as unknown as { deleteProject?: (id: string) => Promise<void> };
       if (typeof api.deleteProject !== 'function') {
-        PluginAPI.showSnack({ msg: 'sync.md Multi: removing a project is not available in this SP version', type: 'ERROR' });
+        PluginAPI.showSnack({ msg: 'Vault Bridge: removing a project is not available in this SP version', type: 'ERROR' });
         return;
       }
       try {
@@ -403,7 +403,7 @@ const askAboutDeletedFolder = (deleted: DeletedFolder, title: string, writeMode:
         void startBindings();
       } catch (err) {
         log.error(`could not remove SP project "${title}"`, err);
-        PluginAPI.showSnack({ msg: `sync.md Multi: could not remove project "${title}"`, type: 'ERROR' });
+        PluginAPI.showSnack({ msg: `Vault Bridge: could not remove project "${title}"`, type: 'ERROR' });
       }
     },
   });
@@ -732,7 +732,7 @@ const dailyDeps = () => ({
   // not painted" via the dev console.
   try {
     PluginAPI.registerMenuEntry({
-      label: 'sync.md Multi',
+      label: 'Vault Bridge',
       icon: 'arrows_up_down_circle',
       onClick: () => {
         PluginAPI.showIndexHtmlAsView();
@@ -744,11 +744,11 @@ const dailyDeps = () => ({
 
   try {
     PluginAPI.registerHeaderButton({
-      label: 'sync.md Multi: Sync Now',
+      label: 'Vault Bridge: Sync Now',
       icon: 'arrows_up_down_circle',
       onClick: () => {
         syncAllNow();
-        PluginAPI.showSnack({ msg: 'sync.md Multi: bidirectional sync triggered', type: 'INFO' });
+        PluginAPI.showSnack({ msg: 'Vault Bridge: bidirectional sync triggered', type: 'INFO' });
       },
     });
   } catch (err) {

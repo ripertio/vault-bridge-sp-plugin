@@ -210,7 +210,7 @@ export const initSyncRegistry = (
         `("${binding.filePath}"). Skipping it — two bindings on one file corrupt each other.`,
     );
     PluginAPI.showSnack({
-      msg: `sync.md Multi: two bindings point at the same file ("${binding.filePath}"). Only one is active — remove the duplicate in the config panel.`,
+      msg: `Vault Bridge: two bindings point at the same file ("${binding.filePath}"). Only one is active — remove the duplicate in the config panel.`,
       type: 'ERROR',
     });
   });
@@ -314,7 +314,7 @@ const handleMissingFile = async (session: SyncSession): Promise<void> => {
         await spToMd(session.config);
         await markSynced(session);
         PluginAPI.showSnack({
-          msg: `sync.md Multi: "${session.config.filePath}" recreated from SP.`,
+          msg: `Vault Bridge: "${session.config.filePath}" recreated from SP.`,
           type: 'SUCCESS',
         });
       },
@@ -322,7 +322,7 @@ const handleMissingFile = async (session: SyncSession): Promise<void> => {
         disposeSession(session);
         configBridge?.deleteBinding(session.config.id);
         PluginAPI.showSnack({
-          msg: 'sync.md Multi: binding deleted (file was missing).',
+          msg: 'Vault Bridge: binding deleted (file was missing).',
           type: 'INFO',
         });
       },
@@ -430,7 +430,7 @@ const handleMissingProject = async (
       // and the modal that follows is where the actual decision is made — a red
       // error snack overstated it.
       PluginAPI.showSnack({
-        msg: `sync.md Multi: project "${title}" was deleted — opening options…`,
+        msg: `Vault Bridge: project "${title}" was deleted — opening options…`,
         type: 'INFO',
       });
       await new Promise((resolve) => setTimeout(resolve, PROJECT_DELETE_SETTLE_MS));
@@ -470,7 +470,7 @@ const handleMissingProject = async (
               const result = await mdToSp(stripTaskIds(content), newProjectId);
               if (result === 'parse-error') {
                 PluginAPI.showSnack({
-                  msg: `sync.md Multi: project "${title}" recreated, but "${session.config.filePath}" could not be parsed — fix the file and Sync Now.`,
+                  msg: `Vault Bridge: project "${title}" recreated, but "${session.config.filePath}" could not be parsed — fix the file and Sync Now.`,
                   type: 'ERROR',
                 });
                 return;
@@ -479,13 +479,13 @@ const handleMissingProject = async (
             await spToMd(session.config);
             markSynced(session);
             PluginAPI.showSnack({
-              msg: `sync.md Multi: project "${title}" recreated in SP for "${session.config.filePath}".`,
+              msg: `Vault Bridge: project "${title}" recreated in SP for "${session.config.filePath}".`,
               type: 'SUCCESS',
             });
           } catch (err) {
             log.error(`[sync-md] Recreate project failed for ${id}:`, err);
             PluginAPI.showSnack({
-              msg: `sync.md Multi: could not recreate the project for "${session.config.filePath}".`,
+              msg: `Vault Bridge: could not recreate the project for "${session.config.filePath}".`,
               type: 'ERROR',
             });
           } finally {
@@ -497,7 +497,7 @@ const handleMissingProject = async (
           disposeSession(session);
           configBridge?.deleteBinding(id);
           PluginAPI.showSnack({
-            msg: 'sync.md Multi: binding deleted (project was missing).',
+            msg: 'Vault Bridge: binding deleted (project was missing).',
             type: 'INFO',
           });
         },
@@ -521,7 +521,7 @@ const handleMissingProject = async (
           disposeSession(session);
           configBridge?.deleteBinding(id);
           PluginAPI.showSnack({
-            msg: `sync.md Multi: binding deleted (project was missing)${cleanNote}.`,
+            msg: `Vault Bridge: binding deleted (project was missing)${cleanNote}.`,
             type: 'INFO',
           });
         },
@@ -1101,7 +1101,7 @@ export const syncAllNow = (): void => {
       .catch((error) => {
         log.error(`[sync-md] syncAllNow failed for ${session.config.id}:`, error);
         PluginAPI.showSnack({
-          msg: `sync.md Multi: Manual sync failed for "${session.config.filePath}".`,
+          msg: `Vault Bridge: Manual sync failed for "${session.config.filePath}".`,
           type: 'ERROR',
         });
       })

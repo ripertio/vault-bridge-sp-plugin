@@ -45,7 +45,7 @@ export const showDeletedFolderDialog = async (
 
   await api.openDialog({
     htmlContent:
-      '<h3>sync.md Multi — folder deleted</h3>' +
+      '<h3>Vault Bridge — folder deleted</h3>' +
       `<p>The folder <code>${escapeHtml(folder)}</code> was deleted from the projects folder. ` +
       `Its project <strong>${escapeHtml(projectTitle)}</strong> still exists in Super Productivity. ` +
       'Please choose:</p>' +

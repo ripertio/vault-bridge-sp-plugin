@@ -44,7 +44,7 @@ export const showCreateFolderDialog = async (
 
   await api.openDialog({
     htmlContent:
-      '<h3>sync.md Multi — new folder</h3>' +
+      '<h3>Vault Bridge — new folder</h3>' +
       `<p>The Super Productivity project <strong>${escapeHtml(projectTitle)}</strong> has no ` +
       'folder in the projects folder. Please choose:</p>' +
       '<ul>' +

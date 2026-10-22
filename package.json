@@ -1,7 +1,7 @@
 {
   "name": "sync-md-multi",
   "version": "0.4.6",
-  "description": "Sync multiple SuperProductivity projects with their own markdown files (bidirectional)",
+  "description": "Two-way bridge between Super Productivity and an Obsidian vault: project folders, daily notes and the Inbox",
   "author": "Fernando Pindado",
   "license": "MIT",
   "repository": {

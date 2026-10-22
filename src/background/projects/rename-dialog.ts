@@ -54,7 +54,7 @@ export const showRenameDialog = async (
 
   await api.openDialog({
     htmlContent:
-      '<h3>sync.md Multi — rename</h3>' +
+      '<h3>Vault Bridge — rename</h3>' +
       `<p>A rename was detected. Rename ${what}?</p>` +
       '<p>Ignore — keep both names and link them as they are. The question is not asked again.</p>' +
       '<p>Keep for now — the question comes back after a restart.</p>',

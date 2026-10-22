@@ -1,9 +1,9 @@
 {
   "id": "sync-md-multi",
   "manifestVersion": 1,
-  "name": "sync.md Multi",
+  "name": "Vault Bridge",
   "version": "0.4.6",
-  "description": "Sync multiple SuperProductivity projects with their own markdown files (bidirectional)",
+  "description": "Two-way bridge between Super Productivity and an Obsidian vault: project folders, daily notes and the Inbox",
   "author": "Fernando Pindado",
   "homepage": "https://codeberg.org/fpindado/sync-md-multi",
   "repository": {

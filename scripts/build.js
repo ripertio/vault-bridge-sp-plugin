@@ -87,7 +87,7 @@ async function buildPlugin() {
 }
 
 async function createZip() {
-  const zipName = `sync-md-multi-v${VERSION}.zip`;
+  const zipName = `vault-bridge-v${VERSION}.zip`;
   const zipPath = path.join(ROOT_DIR, zipName);
 
   // Remove previous zip if exists

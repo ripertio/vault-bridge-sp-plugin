@@ -1,35 +1,8 @@
-# sync.md Multi Plugin for Super Productivity
+# Task file format and sync behaviour
 
-**English** · [Español](README_es.md)
+Reference for the Markdown task files that Vault Bridge reads and writes: project files (`Projects/<Project>/backlog.md`), the Inbox file and manual bindings. The daily note uses the same line syntax inside its `## To Dos` section; its rules are in the [README](../README.md#daily-notes).
 
-`sync.md Multi` is an enhanced version of the original `sync.md` plugin that lets you synchronize multiple Super Productivity projects with their own independent Markdown files simultaneously.
-
-## Contents
-
-- [What does sync.md Multi do?](#what-does-syncmd-multi-do)
-- [Markdown file format](#markdown-file-format)
-- [How synchronization works](#how-synchronization-works)
-- [When a file or project goes missing](#when-a-file-or-project-goes-missing)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Updating the plugin](#updating-the-plugin)
-- [Important considerations](#important-considerations)
-- [Troubleshooting](#troubleshooting)
-- [For developers](#for-developers)
-- [Contributing](#contributing)
-- [Acknowledgements](#acknowledgements)
-
-## What does `sync.md Multi` do?
-
-- **Multiple project bindings**: Link any number of Super Productivity projects to their own `.md` files, each managed independently.
-- **Bidirectional synchronization**: Changes made in Super Productivity are written to the Markdown file; changes made to the Markdown file are imported back into Super Productivity.
-- **Task IDs preserved in Markdown**: Each task is identified by a unique ID embedded as an HTML comment (`<!--task-id-->`), enabling reliable round-trip sync without data loss.
-- **Notes support**: Task notes are synced alongside task titles and completion status.
-- **Header preservation**: Any YAML front matter or free-text content at the top of your `.md` file (before the first task line) is preserved when the plugin rewrites it.
-- **Oscillation prevention**: After a Markdown→SP sync, the plugin suppresses redundant SP→Markdown write-backs for 2 seconds, preventing sync loops.
-- **Window focus awareness**: Sync triggered by file changes runs immediately when Super Productivity is focused; it is deferred until the window regains focus otherwise.
-- **Parent–child task conversion (both directions)**: Change a subtask's indentation in the Markdown file to promote it to a parent task, or indent a parent under another task to make it a subtask — the change is picked up on the next sync. The reverse also works: promoting or demoting a task **in Super Productivity** itself (via its menu or drag-and-drop) is written back to the `.md` file.
-- **Coexistence**: `sync.md Multi` has a different plugin ID (`sync-md-multi`) and can be installed alongside the original `sync.md` plugin without conflicts.
+This engine comes from [`sync-md-multi`](https://codeberg.org/fpindado/sync-md-multi), and some wording below dates from it.
 
 ## Markdown file format
 
@@ -129,65 +102,6 @@ If both the project **and** the `.md` file are gone, only **Delete binding** and
 
 > Deleting a project never wipes your `.md` file. Your Markdown content is always preserved.
 
-## Installation
-
-**For users (recommended)** — install a pre-built ZIP:
-
-1. Download the latest `sync-md-multi-v<version>.zip` from the [Codeberg releases page](https://codeberg.org/fpindado/sync-md-multi/releases).
-2. **Open Super Productivity** and go to `Settings → Plugins`.
-3. Click `Install Plugin from ZIP`, select the downloaded zip, and confirm.
-4. `sync.md Multi` will appear in your plugin list, ready to configure.
-
-**For developers** — build it yourself:
-
-1. Build the plugin:
-   ```sh
-   npm install
-   npm run build
-   ```
-   This produces `dist/plugin.js` and a `sync-md-multi-v<version>.zip` in the project root.
-2. Install the generated ZIP via `Settings → Plugins → Install Plugin from ZIP` (same as above).
-
-> **Desktop only**: File read/write operations require the desktop version of Super Productivity. The plugin will not function in the web or mobile versions.
-
-> ⚠️ **SP version compatibility**: Fully working on Super Productivity **≤ 18.9.1** and **≥ 18.13.1** (verified on macOS, Apple Silicon). The **18.10.0–18.12.x** range blocks file access for externally-loaded plugins (*"Node.js execution is currently only available to built-in desktop plugins"*), so the plugin cannot sync there — **avoid that range**. From **18.13.1** file access is re-enabled behind a one-time consent dialog: the first time the plugin needs it, click **Allow** (the choice is remembered per plugin).
->
-> The manifest's `minSupVersion` (10.0.0) is the minimum **plugin-API** version, not the file-access floor: syncing additionally requires the file-access support described above (SP ≤ 18.9.1 or ≥ 18.13.1).
-
-## Configuration
-
-1. Open the plugin configuration via the **sync.md Multi** entry in SP's left-hand menu (or the gear icon in the plugin list).
-2. Under **Add New Binding**:
-   - Select the Super Productivity project from the dropdown.
-   - Enter the absolute path to the `.md` file (e.g., `/home/user/projects/work-tasks.md`), or click **Browse…** to navigate the filesystem. The file will be created if it does not exist.
-   - Click **Add Binding**.
-3. The binding appears under **Active Bindings** and sync starts immediately — no restart needed.
-
-You can add as many bindings as you have projects. Each binding is independent — a crash or error in one does not affect the others. Each entry under **Active Bindings** also shows when it last synced.
-
-**Note**: Each `.md` file path must be unique across all bindings. The UI will reject a duplicate path to prevent two watchers from fighting over the same file.
-
-To modify a binding, click **Edit**. To remove it, click **Delete** — a confirmation dialog then offers three choices:
-
-- **Delete binding** — remove the binding and leave the `.md` file untouched (its hidden `<!--…-->` sync markers stay in place).
-- **Delete + clean file** — remove the binding **and** strip the hidden `<!--…-->` sync markers from the file, leaving it neutral (unbound). Use this if you want to hand the file to another tool or re-bind it cleanly later.
-- **Cancel** — keep the binding.
-
-Neither delete option removes the `.md` file itself — only the binding (and, for **Delete + clean file**, the sync markers inside it).
-
-A **Sync Now** button in the SP header bar (labelled "sync.md Multi: Sync Now") forces an immediate **bidirectional** sync for all active bindings. The direction is chosen per file: if the file changed since its last sync, it is imported into SP **first** (so your manual edit is never overwritten) and the current SP state is written back afterwards; otherwise SP→Markdown runs first. Either way both directions run.
-
-## Updating the plugin
-
-The plugin checks whether a newer release is available every time Super Productivity starts, and then once a day while it stays open. If a newer release exists it lets you know: a notification when Super Productivity starts, an **upgrade** button in the header (click it to open the release page), and an "update available" marker in the config panel footer. Installing the update is always manual — SP has no way for a plugin to reinstall itself — so when you see the notice, download the new ZIP from the [Codeberg releases page](https://codeberg.org/fpindado/sync-md-multi/releases) and install it as below.
-
-You have two options:
-
-- **Quick update**: install the new ZIP directly from `Settings → Plugins → Install Plugin from ZIP` without uninstalling first. SP will overwrite the existing plugin files in place.
-- **Clean update**: uninstall the current version first, then install the new ZIP.
-
-Either way, your binding configuration is stored **locally on this device** (in the plugin's own local storage, not synced across devices) and is preserved across updates. Because a binding's file path is an absolute path specific to this machine, configuration is intentionally not synced between devices.
-
 ## Important considerations
 
 - **Desktop only**: File operations are not available in the web or mobile versions of Super Productivity.
@@ -197,7 +111,6 @@ Either way, your binding configuration is stored **locally on this device** (in 
 - **Unique IDs in comments**: Do not remove or alter the `<!--id-->` comments in your Markdown file. They are the link between a line and its SP task. A line without an ID comment will be treated as a new task on the next sync.
 - **Section headers and non-task lines are preserved**: Markdown headings (`##`, `###`, etc.) and all other non-task lines within the task area are kept exactly as-is during a SP→Markdown write-back. They are not imported into SP (no section concept in SP), but they survive write-backs intact.
 - **Notes in the file are the source of truth**: Task notes in the Markdown file are preserved verbatim during SP→Markdown write-back. If you edit a task's notes inside Super Productivity, those changes will NOT be written back to the Markdown file — the file's note lines are kept as-is. Notes written in the Markdown file are, however, imported into SP on the next Markdown→SP sync.
-- **Config migration**: If you were using the original `sync.md` plugin, its single-project configuration (`filePath` + `projectId`) is automatically migrated to a V2 binding on first load.
 
 ### What happens to existing SP tasks when you create a binding
 
@@ -233,28 +146,3 @@ Open the developer console (`Ctrl+Shift+I` / `Cmd+Option+I`) and look for `[sync
 
 **SP→Markdown sync fires but produces no visible change**
 The 2-second cooldown after a Markdown→SP sync may be suppressing the write-back. This is intentional — wait a few seconds and trigger a task update in SP to force a fresh SP→Markdown sync.
-
-## For developers
-
-```sh
-npm install          # Install dependencies
-npm run build        # Bundle the plugin + create the dist ZIP
-npm test             # Run the test suite
-npx tsc --noEmit     # TypeScript type check
-```
-
-Architecture and implementation details are documented in `Tech_Docs/`.
-
-## Contributing
-
-If you find a bug or want to propose a feature, please open an issue. Pull requests are welcome.
-
-## Acknowledgements
-
-`sync.md Multi` is based on the original [`sync.md`](https://github.com/super-productivity/super-productivity/tree/master/packages/plugin-dev/sync-md) plugin, created by **Johannes Millan** ([@johannesjo](https://github.com/johannesjo)), the author of [Super Productivity](https://github.com/johannesjo/super-productivity). Many thanks for the excellent foundation that made this extension possible.
-
-The multi-project evolution was developed by Fernando Pindado together with Claude (Anthropic).
-
----
-
-Based on [`sync.md`](https://github.com/super-productivity/super-productivity/tree/master/packages/plugin-dev/sync-md) by [@johannesjo](https://github.com/johannesjo) · Multi-project extension by Fernando Pindado with Claude (Anthropic)

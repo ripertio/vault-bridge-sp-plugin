@@ -83,7 +83,7 @@ export const showMissingFileDialog = async (
   try {
     await api.openDialog({
       htmlContent:
-        '<h3>sync.md Multi — file not found</h3>' +
+        '<h3>Vault Bridge — file not found</h3>' +
         `<p>The Markdown file <code>${escapeHtml(filePath)}</code> could not be found ` +
         'when syncing. A binding cannot continue without its file — please choose:</p>' +
         '<ul>' +
@@ -111,7 +111,7 @@ export const showMissingFileDialog = async (
   } catch (err) {
     log.error('[sync-md] showMissingFileDialog failed:', err);
     PluginAPI.showSnack({
-      msg: `sync.md Multi: could not show the missing-file dialog for "${filePath}".`,
+      msg: `Vault Bridge: could not show the missing-file dialog for "${filePath}".`,
       type: 'ERROR',
     });
   }
@@ -203,7 +203,7 @@ export const showMissingProjectDialog = async (
   try {
     await api.openDialog({
       htmlContent:
-        '<h3>sync.md Multi — project not found</h3>' +
+        '<h3>Vault Bridge — project not found</h3>' +
         `<p>The Super Productivity project ${projectRef} ` +
         'no longer exists. A deleted project cannot be fixed by hand (a new one gets a ' +
         'different id), so please choose:</p>' +
@@ -219,7 +219,7 @@ export const showMissingProjectDialog = async (
   } catch (err) {
     log.error('[sync-md] showMissingProjectDialog failed:', err);
     PluginAPI.showSnack({
-      msg: `sync.md Multi: could not show the missing-project dialog for "${filePath}".`,
+      msg: `Vault Bridge: could not show the missing-project dialog for "${filePath}".`,
       type: 'ERROR',
     });
   }
