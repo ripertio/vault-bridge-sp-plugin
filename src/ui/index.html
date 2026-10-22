@@ -105,7 +105,10 @@
           </div>
           <div class="form-group">
             <label for="inboxFile">Inbox file (tasks in the Inbox without a project)</label>
-            <input type="text" id="inboxFile" placeholder="Inbox/Unsorted.md" />
+            <div class="file-input-row">
+              <input type="text" id="inboxFile" placeholder="Inbox/Unsorted.md" />
+              <button type="button" class="btn btn-outline" id="inboxFileBrowse">Browse…</button>
+            </div>
             <span class="file-hint">Path inside the vault, relative to it. Empty turns the Inbox sync off.</span>
             <label><input type="checkbox" id="inboxRemoveDone" /> Remove checked tasks from the Inbox file (the SP task stays)</label>
           </div>
@@ -553,13 +556,12 @@
               fbLoadDir(item.path);
             } else {
               if (fbFileCallback) {
-                const vault = document.getElementById('vaultPath').value.trim().replace(/[\\/]+$/, '');
-                const projDir = document.getElementById('projectsDir').value.trim().replace(/[\\/]+$/, '');
-                const base = vault + '/' + projDir + '/';
+                const base = fbFileBase + '/';
                 const cb = fbFileCallback;
+                const inside = item.path.startsWith(base);
                 fbClose();
-                if (item.path.startsWith(base)) cb(item.path.slice(base.length));
-                else showStatus('Choose a file inside the projects folder.', 'error');
+                if (inside) cb(item.path.slice(base.length));
+                else showStatus('Choose a file inside the ' + fbFileWhere + '.', 'error');
                 return;
               }
               fbClose();
@@ -573,6 +575,9 @@
       let fbFolderMode = false;
       let fbTarget = null;
       let fbFileCallback = null;
+      // Folder the picked file must be inside, and the name used in the error message.
+      let fbFileBase = '';
+      let fbFileWhere = 'projects folder';
 
       function fbOpenFolder(targetInputId, startDir) {
         fbFolderMode = true;
@@ -589,12 +594,19 @@
 
       // Pick a .md file inside the projects folder and hand its relative path to cb.
       function fbPickBindFile(cb) {
+        const vault = document.getElementById('vaultPath').value.trim().replace(/[\\/]+$/, '');
+        const projDir = document.getElementById('projectsDir').value.trim();
+        fbPickFileIn(vault && projDir ? vault + '/' + projDir : vault, 'projects folder', cb);
+      }
+
+      // Pick a .md file inside `base` and hand its path relative to `base` to cb.
+      function fbPickFileIn(base, where, cb) {
         fbFolderMode = false;
         fbTarget = null;
         fbFileCallback = cb;
-        const vault = document.getElementById('vaultPath').value.trim().replace(/[\\/]+$/, '');
-        const projDir = document.getElementById('projectsDir').value.trim();
-        fbOpenAt(vault && projDir ? vault + '/' + projDir : vault);
+        fbFileBase = base;
+        fbFileWhere = where;
+        fbOpenAt(base);
       }
 
       function fbResetMode() {
@@ -611,6 +623,11 @@
       }
 
       document.getElementById('vaultPathBrowse').addEventListener('click', () => fbOpenFolder('vaultPath'));
+      document.getElementById('inboxFileBrowse').addEventListener('click', () => {
+        const vault = document.getElementById('vaultPath').value.trim().replace(/[\\/]+$/, '');
+        if (!vault) { showStatus('Set the vault path first.', 'error'); return; }
+        fbPickFileIn(vault, 'vault', (rel) => { document.getElementById('inboxFile').value = rel; });
+      });
       document.getElementById('fbUseFolderBtn').addEventListener('click', () => {
         if (fbTarget && fbCurrentDir) {
           // The projects folder is stored relative to the vault path.
