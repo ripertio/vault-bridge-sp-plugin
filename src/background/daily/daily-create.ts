@@ -32,3 +32,21 @@ export const stampNewTaskLine = (line: string, id: string): string => {
   if (!m) return line;
   return `${m[1]}${m[2]}${m[3]}<!--${id}--> ${m[4].trim()}`;
 };
+
+/**
+ * Stamp IDs into note text that changed after the stamps were made. A line is matched by
+ * its exact text, so a line the user edited or deleted is not stamped and is counted in `unmatched`.
+ */
+export const stampCreatedLines = (
+  text: string,
+  stamps: { original: string; stamped: string }[],
+): { text: string; unmatched: number } => {
+  const lines = text.split('\n');
+  let unmatched = 0;
+  for (const s of stamps) {
+    const i = lines.indexOf(s.original);
+    if (i === -1) unmatched++;
+    else lines[i] = s.stamped;
+  }
+  return { text: lines.join('\n'), unmatched };
+};

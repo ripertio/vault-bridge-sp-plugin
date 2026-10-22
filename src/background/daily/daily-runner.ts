@@ -11,9 +11,10 @@ import {
 import { planDailyNote, DailyPlanTask, INBOX_PROJECT_ID } from './daily-plan';
 import { DailyBaseline, diffNoteAgainstBaseline, findRemovedBaselineIds, parseNoteTaskLine } from './daily-reverse';
 import { applyBatch } from '../sync/md-to-sp';
-import { findNewTaskLines, stampNewTaskLine } from './daily-create';
+import { findNewTaskLines, stampCreatedLines, stampNewTaskLine } from './daily-create';
 import { findToDosSection } from './daily-note';
 import { findOverdueIds, insertIntoSection, readPreviousNote } from './daily-rollover';
+import { createSerialQueue } from '../helper/serial-queue';
 
 export interface DailyRunDeps {
   // Persist the baseline and the day of the note it was written for (device-local config).
@@ -34,11 +35,14 @@ export interface DailyRunDeps {
  * ## To Dos and checkboxes follow SP. Writes only happen when dryRun is false.
  * Tasks are never created or deleted from the note.
  */
-export const runDailyNoteDryRun = async (
-  cfg: DailyNoteCfg,
-  deps: DailyRunDeps,
-  now: Date = new Date(),
-): Promise<void> => {
+// The startup run, the watcher, task hooks and the day check can all start a run.
+// Two overlapping runs would both create the SP task for the same typed line.
+const runQueue = createSerialQueue();
+
+export const runDailyNoteDryRun = (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date = new Date()): Promise<void> =>
+  runQueue(() => runDailyNote(cfg, deps, now));
+
+const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): Promise<void> => {
   if (!cfg.enabled) return;
   if (!cfg.vaultPath) {
     log.error('Daily notes enabled but no vault root is set');
@@ -133,6 +137,8 @@ export const runDailyNoteDryRun = async (
   const section = findToDosSection(working);
   const created: string[] = [];
   const createdTasks: { id: string; title: string; isDone: boolean }[] = [];
+  // Each new line before and after its ID is stamped, so the note can be re-stamped if it changed.
+  const stamps: { original: string; stamped: string }[] = [];
   if (section) {
     const newTasks = findNewTaskLines(working, section.bodyStart, section.bodyEnd);
     for (const nt of newTasks) {
@@ -145,7 +151,9 @@ export const runDailyNoteDryRun = async (
         dueDay: isoDay(now),
       };
       const id = await PluginAPI.addTask(data);
-      working[nt.lineIndex] = stampNewTaskLine(working[nt.lineIndex], id);
+      const original = working[nt.lineIndex];
+      working[nt.lineIndex] = stampNewTaskLine(original, id);
+      stamps.push({ original, stamped: working[nt.lineIndex] });
       created.push(id);
       createdTasks.push({ id, title: nt.title, isDone: nt.isDone });
     }
@@ -209,6 +217,13 @@ export const runDailyNoteDryRun = async (
     const current = await readTasksFile(notePath);
     if (current !== content) {
       log.log('daily note changed during planning, skipping write');
+      // The SP tasks for new lines already exist. Stamp their IDs into the current note,
+      // or the next run creates them again.
+      if (current !== null && stamps.length > 0) {
+        const merged = stampCreatedLines(current, stamps);
+        if (merged.unmatched > 0) log.log(`  ! ${merged.unmatched} created task line(s) changed, not stamped`);
+        await writeTasksFile(notePath, merged.text);
+      }
       return;
     }
     await writeTasksFile(notePath, result.nextLines.join('\n'));

@@ -118,6 +118,43 @@ describe('runDailyNoteDryRun', () => {
     expect(log.log).toHaveBeenCalledWith('daily note changed during planning, skipping write');
   });
 
+  it('stamps the ID of a created task into the note when the note changed during planning', async () => {
+    mockedRead
+      .mockResolvedValueOnce('## To Dos\n- [ ] Neuer Task')
+      .mockResolvedValueOnce('## To Dos\n- [ ] Neuer Task\nuser edit\n');
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: [] }]),
+      getTasks: jest.fn().mockResolvedValue([]),
+      addTask: jest.fn().mockResolvedValue('NEW1'),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, deps, NOW);
+    expect(mockedWrite).toHaveBeenCalledWith(
+      '/vault/Daily/2026-10-21.md',
+      '## To Dos\n- [ ] <!--NEW1--> Neuer Task\nuser edit\n',
+    );
+  });
+
+  it('creates the SP task once when two runs overlap', async () => {
+    let note = '## To Dos\n- [ ] Neuer Task';
+    mockedRead.mockImplementation(async () => note);
+    mockedWrite.mockImplementation(async (_path: string, text: string) => {
+      note = text;
+    });
+    const addTask = jest.fn().mockResolvedValue('NEW2');
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: [] }]),
+      getTasks: jest.fn().mockResolvedValue([]),
+      addTask,
+    };
+    await Promise.all([
+      runDailyNoteDryRun({ ...cfg, dryRun: false }, deps, NOW),
+      runDailyNoteDryRun({ ...cfg, dryRun: false }, deps, NOW),
+    ]);
+    expect(addTask).toHaveBeenCalledTimes(1);
+    expect(note).toBe('## To Dos\n- [ ] <!--NEW2--> Neuer Task');
+    mockedWrite.mockReset();
+  });
+
   it('never creates a missing note', async () => {
     mockedRead.mockResolvedValue(null);
     setSp(['p1']);

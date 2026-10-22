@@ -4,7 +4,7 @@ Result of a `/code-review` run on 2026-10-22, branch `feature/obsidian-sync`. Te
 
 | # | Area | Location | Summary |
 | --- | --- | --- | --- |
-| 1 | Daily notes | `src/background/daily/daily-runner.ts:203` | SP tasks are created before the "changed during planning" guard, which then skips stamping their IDs |
+| 1 | Daily notes | `src/background/daily/daily-runner.ts:203` | SP tasks are created before the "changed during planning" guard, which then skips stamping their IDs (fixed) |
 | 2 | Daily notes | `src/background/daily/daily-runner.ts:194` | Early return skips saving the baseline after reverse updates and deletes (fixed) |
 | 3 | Startup | `src/background/background.ts:897` | An Inbox-only setup does not start syncing after a restart (fixed) |
 | 4 | Daily notes | `src/background/background.ts:1031` | Changing the vault path does not restart the daily-note watcher |
@@ -24,6 +24,8 @@ Result of a `/code-review` run on 2026-10-22, branch `feature/obsidian-sync`. Te
 The startup run, the watcher's `notifyOnCreate`, `taskUpdate` and the day-change check can all start overlapping runs, because there is no mutex.
 
 **Direction.** Stamp the IDs in a write that cannot be skipped, or re-read and merge instead of skipping. Add a lock so only one daily run is active at a time.
+
+**Fixed.** `runDailyNoteDryRun` runs through `createSerialQueue`, so runs never overlap. When the note changed during planning, the IDs of tasks already created are stamped into the current note instead of being dropped. A created line the user has edited or deleted is not stamped, and the run logs it. Tested in `src/background/daily/__tests__/daily-runner.test.ts`.
 
 ## 2. Baseline not saved after reverse updates
 
