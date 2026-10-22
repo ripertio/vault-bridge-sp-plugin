@@ -15,6 +15,9 @@ export interface ProjectsDirCfg {
   // Off by default. When on, deleting a linked folder asks in SP whether to remove the
   // project or unlink it. Nothing is removed without that answer.
   confirmFolderDelete: boolean;
+  // Off by default. When on, a project removed in SP adds its folder name to the
+  // excluded list, so the folder is not offered for a new project again.
+  excludeRemovedProjects: boolean;
 }
 
 export const DEFAULT_PROJECTS_DIR_CFG: ProjectsDirCfg = {
@@ -24,6 +27,7 @@ export const DEFAULT_PROJECTS_DIR_CFG: ProjectsDirCfg = {
   folderBinds: {},
   taskFileName: 'backlog.md',
   confirmFolderDelete: false,
+  excludeRemovedProjects: false,
 };
 
 export type ProjectsDirValidation =

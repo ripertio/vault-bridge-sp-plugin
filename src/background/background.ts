@@ -31,7 +31,7 @@ import { createSpProject } from './sync/missing-resource';
 import { planReconcile } from './projects/reconcile';
 import { runProjectsReconcile } from './projects/reconcile-run';
 import { matchFoldersToProjects } from './projects/project-dir';
-import { findDeletedFolders } from './projects/folder-delete';
+import { findDeletedFolders, findRemovedProjectFolders } from './projects/folder-delete';
 import type { DeletedFolder } from './projects/folder-delete';
 import { showDeletedFolderDialog } from './projects/folder-delete-dialog';
 import { showCreateProjectDialog } from './projects/create-project-dialog';
@@ -349,7 +349,21 @@ const startBindings = async (): Promise<void> => {
         ? projects.map((p) => ({ ...p, title: renames.renameProjects.find((r) => r.projectId === p.id)?.to ?? p.title }))
         : projects;
 
-      const match = matchFoldersToProjects(renamedFolders, renamedProjects, projectsDir.excluded);
+      // Opt-in: a project removed in SP adds its folder name to the excluded list, so the
+      // folder is not offered for a new project. Checked before matching, and skipped if
+      // the project list came back empty (a failed read must not exclude everything).
+      let excluded = projectsDir.excluded;
+      if (projectsDir.excludeRemovedProjects && projects.length > 0) {
+        const liveIds = new Set(projects.map((p) => p.id));
+        for (const r of findRemovedProjectFolders(links, renamedFolders, liveIds)) {
+          log.log(`project removed in SP, excluding folder "${r.folder}"${writeMode ? '' : ' (dry-run)'}`);
+          excluded = ignoreRow(excluded, r.folder);
+        }
+        if (writeMode && excluded !== projectsDir.excluded) {
+          currentConfig = { ...currentConfig, projectsDir: { ...projectsDir, excluded } };
+        }
+      }
+      const match = matchFoldersToProjects(renamedFolders, renamedProjects, excluded);
       // Opt-in: a linked folder that vanished is a question for the user, not a reason to
       // recreate it. Checked against the folders before this run's renames.
       const projectIds = new Set(projects.map((p) => p.id));

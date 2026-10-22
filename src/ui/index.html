@@ -167,6 +167,10 @@
             <p class="file-hint">Off: a deleted folder is created again on the next sync. On: nothing is removed without your answer.</p>
           </div>
           <div class="form-group">
+            <label><input type="checkbox" id="projectsExcludeRemoved" /> When a project is removed in Super Productivity, add its folder name to the excluded list</label>
+            <p class="file-hint">Off: the folder is offered again as a new project. On: the folder is left out of sync from then on.</p>
+          </div>
+          <div class="form-group">
             <label for="projectsExcluded">Excluded (one name per line, folder or project title)</label>
             <textarea id="projectsExcluded" rows="4" placeholder="Old project"></textarea>
           </div>
@@ -711,6 +715,7 @@
         document.getElementById('projectsDir').value = p.projectsDir ?? 'Projects';
         document.getElementById('taskFileName').value = p.taskFileName ?? 'backlog.md';
         document.getElementById('projectsConfirmDelete').checked = !!p.confirmFolderDelete;
+        document.getElementById('projectsExcludeRemoved').checked = !!p.excludeRemovedProjects;
         document.getElementById('projectsExcluded').value = (p.excluded || []).join('\n');
       }
 
@@ -732,6 +737,7 @@
           projectsDir: document.getElementById('projectsDir').value.trim(),
           taskFileName: document.getElementById('taskFileName').value.trim(),
           confirmFolderDelete: document.getElementById('projectsConfirmDelete').checked,
+          excludeRemovedProjects: document.getElementById('projectsExcludeRemoved').checked,
           excluded: document.getElementById('projectsExcluded').value.split('\n'),
         };
         try {
