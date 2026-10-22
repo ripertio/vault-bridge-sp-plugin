@@ -24,7 +24,7 @@ import { resolveDailyNoteCfg } from './daily/daily-note';
 import { validateDailySettings } from './daily/daily-settings';
 import { validateProjectsDirCfg, resolveProjectsDirCfg } from './projects/project-dir';
 import { computeEffectiveBindings } from './projects/effective-bindings';
-import { assertRealPathInside, listSubfolders, renameSubfolder } from './helper/file-utils';
+import { assertRealPathInside, listExistingFiles, listSubfolders, renameSubfolder } from './helper/file-utils';
 import { planRenames } from './projects/rename';
 import { migrateManualBindings } from './projects/migrate-bindings';
 import { effectiveVaultPath, validateVaultPath } from './vault';
@@ -409,6 +409,27 @@ const askAboutDeletedFolder = (deleted: DeletedFolder, title: string, writeMode:
   });
 };
 
+// Manual binds to a .md file in the projects folder (for example "Inbox/backlog.md").
+// Only binds whose file exists, and whose real path stays in the vault, take part in matching.
+const boundFilesPresent = async (
+  vault: string,
+  absDir: string,
+  binds: Record<string, string>,
+): Promise<string[]> => {
+  const rels = Object.keys(binds).filter((k) => validBindFile(k));
+  if (rels.length === 0) return [];
+  const present: string[] = [];
+  for (const rel of await listExistingFiles(absDir, rels)) {
+    try {
+      await assertRealPathInside(vault, `${absDir}/${rel}`);
+      present.push(rel);
+    } catch {
+      // Outside the vault: not matched.
+    }
+  }
+  return present;
+};
+
 // The Inbox file: tasks in the SP Inbox (no project) are synced with the .md file set in
 // the vault section. Off when no file is set. Its real path is checked before it runs.
 const inboxBindings = async (vaultPath: string): Promise<SyncBindingCfg[]> => {
@@ -486,7 +507,15 @@ const startBindings = async (): Promise<void> => {
           currentConfig = { ...currentConfig, projectsDir: { ...projectsDir, excluded } };
         }
       }
-      const match = matchFoldersToProjects(renamedFolders, renamedProjects, excluded);
+      // Matched against the folders plus the bound .md files, with the binds applied, so a
+      // bound folder or file is not offered for a new project.
+      const boundFiles = await boundFilesPresent(vaultPath, absDir, projectsDir.folderBinds ?? {});
+      const match = matchFoldersToProjects(
+        [...renamedFolders, ...boundFiles],
+        renamedProjects,
+        excluded,
+        projectsDir.folderBinds ?? {},
+      );
       // Opt-in: a linked folder that vanished is a question for the user, not a reason to
       // recreate it. Checked against the folders before this run's renames.
       const projectIds = new Set(projects.map((p) => p.id));
@@ -540,7 +569,10 @@ const startBindings = async (): Promise<void> => {
     projectsDir,
     vaultPath,
     {
-      listFolders: listSubfolders,
+      listFolders: async (dir) => [
+        ...(await listSubfolders(dir)),
+        ...(await boundFilesPresent(effectiveVaultPath(currentConfig), dir, currentConfig.projectsDir?.folderBinds ?? {})),
+      ],
       getProjects: async () =>
         (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title })),
     },
@@ -909,8 +941,9 @@ const dailyDeps = () => ({
         try {
           const absDir = `${vault.replace(/[\\/]+$/, '')}/${dirCfg.projectsDir}`;
           const folders = await listSubfolders(absDir);
+          const bound = await boundFilesPresent(vault, absDir, dirCfg.folderBinds ?? {});
           const projects = (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title }));
-          return { success: true, rows: buildLinkTable(folders, projects, dirCfg.excluded, dirCfg.folderBinds ?? {}) };
+          return { success: true, rows: buildLinkTable([...folders, ...bound], projects, dirCfg.excluded, dirCfg.folderBinds ?? {}) };
         } catch (err) {
           return { success: false, error: err instanceof Error ? err.message : String(err) };
         }

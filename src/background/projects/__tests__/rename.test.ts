@@ -80,3 +80,10 @@ describe('planRenames', () => {
     expect(plan.renameProjects).toEqual([]);
   });
 });
+
+describe('planRenames: manual binds to a .md file', () => {
+  it('never renames a link that points at a .md file', () => {
+    const plan = planRenames({ p1: 'Inbox/backlog.md' }, ['Inbox'], [{ id: 'p1', title: 'Renamed' }], ['Inbox']);
+    expect(plan).toEqual({ renameFolders: [], renameProjects: [] });
+  });
+});

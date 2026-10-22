@@ -250,3 +250,38 @@ export const assertRealPathInside = async (root: string, target: string): Promis
     throw new Error(nodeResult?.error || toErrorMessage(result.error) || 'path check failed');
   }
 };
+
+/**
+ * Which of the given paths (relative to `dirPath`) exist as regular files. Read-only.
+ * Used for manual binds to a .md file, so the matcher can see the file.
+ */
+export const listExistingFiles = async (dirPath: string, relPaths: string[]): Promise<string[]> => {
+  if (relPaths.length === 0) return [];
+  const result = await PluginAPI.executeNodeScript!({
+    script: `
+      const fs = require('fs');
+      const path = require('path');
+      try {
+        const dir = path.resolve(args[0]);
+        const names = args[1].filter((rel) => {
+          try {
+            return fs.statSync(path.join(dir, rel)).isFile();
+          } catch {
+            return false;
+          }
+        });
+        return { success: true, names };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    `,
+    args: [dirPath, relPaths],
+    timeout: 5000,
+  });
+
+  const nodeResult = result.result as { success: boolean; names?: string[]; error?: string } | undefined;
+  if (!result.success || !nodeResult?.success) {
+    throw new Error(nodeResult?.error || toErrorMessage(result.error) || 'Failed to check files');
+  }
+  return nodeResult.names ?? [];
+};

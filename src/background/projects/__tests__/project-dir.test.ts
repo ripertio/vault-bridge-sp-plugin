@@ -182,3 +182,13 @@ describe('matchFoldersToProjects: a title held by a bound project', () => {
     expect(r.ambiguous).toEqual(['Sync Files']);
   });
 });
+
+describe('matchFoldersToProjects: manual bind to a .md file', () => {
+  it('matches a bound file path to its project', () => {
+    const r = matchFoldersToProjects(['Other', 'Inbox/backlog.md'], [P('p1', 'Sync Files')], [], {
+      'Inbox/backlog.md': 'p1',
+    });
+    expect(r.matched).toEqual([{ folder: 'Inbox/backlog.md', projectId: 'p1' }]);
+    expect(r.projectsWithoutFolder).toEqual([]);
+  });
+});

@@ -38,6 +38,8 @@ export const planRenames = (
   const plan: RenamePlan = { renameFolders: [], renameProjects: [] };
 
   for (const [projectId, oldFolder] of Object.entries(links)) {
+    // A link to a .md file is a manual bind, not a folder: it is never renamed.
+    if (/\.md$/i.test(oldFolder)) continue;
     const project = projectById.get(projectId);
     const oldFolderExists = folderSet.has(oldFolder);
     if (!project) continue; // project deleted: not a rename, never handled here
