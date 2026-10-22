@@ -489,9 +489,7 @@ const startBindings = async (): Promise<void> => {
       const heldNames = new Set(pending.flatMap((r) => [r.from, r.to]));
       // A project renamed in the vault: its new folder name is not known to the plugin yet.
       const newFolderNames = new Set(renames.renameProjects.map((r) => r.to));
-      const renamedFolders = folders;
       const knownFolders = folders.filter((f) => !newFolderNames.has(f));
-      const renamedProjects = projects;
 
       // Opt-in: a project removed in SP adds its folder name to the excluded list, so the
       // folder is not offered for a new project. Checked before matching, and skipped if
@@ -499,7 +497,7 @@ const startBindings = async (): Promise<void> => {
       let excluded = projectsDir.excluded;
       if (projectsDir.excludeRemovedProjects && projects.length > 0) {
         const liveIds = new Set(projects.map((p) => p.id));
-        for (const r of findRemovedProjectFolders(links, renamedFolders, liveIds)) {
+        for (const r of findRemovedProjectFolders(links, folders, liveIds)) {
           log.log(`project removed in SP, excluding folder "${r.folder}"${writeMode ? '' : ' (dry-run)'}`);
           excluded = ignoreRow(excluded, r.folder);
         }
@@ -511,8 +509,8 @@ const startBindings = async (): Promise<void> => {
       // bound folder or file is not offered for a new project.
       const boundFiles = await boundFilesPresent(vaultPath, absDir, projectsDir.folderBinds ?? {});
       const match = matchFoldersToProjects(
-        [...renamedFolders, ...boundFiles],
-        renamedProjects,
+        [...folders, ...boundFiles],
+        projects,
         excluded,
         projectsDir.folderBinds ?? {},
       );
