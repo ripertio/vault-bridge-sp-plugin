@@ -34,6 +34,7 @@ import { matchFoldersToProjects } from './projects/project-dir';
 import { findDeletedFolders } from './projects/folder-delete';
 import type { DeletedFolder } from './projects/folder-delete';
 import { showDeletedFolderDialog } from './projects/folder-delete-dialog';
+import { showCreateProjectDialog } from './projects/create-project-dialog';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
 declare const __PLUGIN_VERSION__: string;
@@ -246,6 +247,35 @@ const maybeCheckForUpdate = async (isStartup = false): Promise<void> => {
 // restart, so an unanswered question comes back then.
 const askedDeletedFolders = new Set<string>();
 
+// Folders without an SP project already asked about this session. Cleared on restart,
+// so a "Keep for now" answer comes back then.
+const askedNewFolders = new Set<string>();
+
+// Ask in SP before creating a project for a new folder. Create makes the project;
+// Ignore adds the folder to the excluded list so it is not asked about again.
+const askAboutNewFolder = (folder: string): void => {
+  if (askedNewFolders.has(folder)) return;
+  askedNewFolders.add(folder);
+  void showCreateProjectDialog(folder, {
+    onCreate: async () => {
+      try {
+        await createSpProject(folder);
+        log.log(`created SP project "${folder}"`);
+        void startBindings();
+      } catch (err) {
+        log.error(`could not create SP project "${folder}"`, err);
+      }
+    },
+    onIgnore: () => {
+      const dirCfg = resolveProjectsDirCfg(currentConfig.projectsDir);
+      currentConfig = { ...currentConfig, projectsDir: { ...dirCfg, excluded: ignoreRow(dirCfg.excluded, folder) } };
+      persistConfig();
+      log.log(`ignoring folder "${folder}"`);
+      void startBindings();
+    },
+  });
+};
+
 // Ask in SP what to do with a project whose linked folder was deleted. A dry-run only
 // logs. Unlink keeps the project and stops its folder from being created again.
 // Remove deletes the project (and its tasks) only after the user presses that button.
@@ -354,7 +384,7 @@ const startBindings = async (): Promise<void> => {
       const held = new Set([...deleted.map((d) => d.projectId), ...(currentConfig._unlinkedProjectIds ?? [])]);
       plan.foldersToCreate = plan.foldersToCreate.filter((p) => !held.has(p.id));
       await runProjectsReconcile(plan, absDir, projectsDir.taskFileName, dailyCfg().dryRun, {
-        createProject: createSpProject,
+        askCreateProject: askAboutNewFolder,
         writeBacklog: async (binding) => {
           await spToMd(binding);
         },

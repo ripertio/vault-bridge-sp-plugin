@@ -3,8 +3,9 @@ import type { ReconcilePlan } from './reconcile';
 import { log } from '../../shared/logger';
 
 export interface ReconcileDeps {
-  // Create an SP project for a folder name, returns the new project id.
-  createProject: (title: string) => Promise<string>;
+  // Ask the user in SP whether to create a project for a folder name. Nothing is
+  // created here; the answer comes from the dialog's button.
+  askCreateProject: (folder: string) => void;
   // Write the project's tasks to its task file (creates the folder when needed).
   writeBacklog: (binding: SyncBindingCfg) => Promise<void>;
 }
@@ -12,7 +13,8 @@ export interface ReconcileDeps {
 /**
  * Carry out the reconcile plan. Write mode only: in dry-run it logs the intent and
  * changes nothing. A failure on one item is logged and does not stop the others.
- * Returns the number of items created.
+ * Returns the number of items created. Projects are never created here directly:
+ * folders without a project are handed to `askCreateProject`.
  */
 export const runProjectsReconcile = async (
   plan: ReconcilePlan,
@@ -24,16 +26,10 @@ export const runProjectsReconcile = async (
   let created = 0;
   for (const folder of plan.projectsToCreate) {
     if (dryRun) {
-      log.log(`would create SP project "${folder}"`);
+      log.log(`would ask whether to create SP project "${folder}"`);
       continue;
     }
-    try {
-      const id = await deps.createProject(folder);
-      log.log(`created SP project "${folder}" (${id})`);
-      created++;
-    } catch (err) {
-      log.error(`could not create SP project "${folder}"`, err);
-    }
+    deps.askCreateProject(folder);
   }
 
   for (const project of plan.foldersToCreate) {
