@@ -19,11 +19,18 @@ export interface RenamePlan {
  * changed to different names, nothing is done (ambiguous). A rename target that
  * is already used by another folder or project is also skipped, so nothing is
  * overwritten.
+ *
+ * A folder-side rename target must be a folder that appeared since the last run
+ * (`previousFolders`). A folder that was already there and never linked is not a
+ * rename target, so deleting a linked folder never renames its project onto an
+ * unrelated folder. With `previousFolders` null (no snapshot yet) no folder-side
+ * rename is planned.
  */
 export const planRenames = (
   links: ProjectLinks,
   folders: string[],
   projects: ProjectRef[],
+  previousFolders: string[] | null,
 ): RenamePlan => {
   const folderSet = new Set(folders);
   const projectById = new Map(projects.map((p) => [p.id, p]));
@@ -43,12 +50,14 @@ export const planRenames = (
       if (folderSet.has(project.title)) continue; // target taken: skip
       plan.renameFolders.push({ from: oldFolder, to: project.title, projectId });
     } else if (folderRenamed && !projectRenamed) {
-      // Folder side changed: find the new folder name. Only one unlinked folder may
-      // be the target, otherwise it is ambiguous.
-      const unlinked = folders.filter((f) => !Object.values(links).includes(f));
-      if (unlinked.length !== 1) continue;
-      if (usedTitles.has(unlinked[0])) continue; // a project already has that name
-      plan.renameProjects.push({ projectId, from: project.title, to: unlinked[0] });
+      // Folder side changed: find the new folder name. Only one new, unlinked folder
+      // may be the target, otherwise it is ambiguous.
+      if (previousFolders === null) continue;
+      const linkedFolders = Object.values(links);
+      const appeared = folders.filter((f) => !previousFolders.includes(f) && !linkedFolders.includes(f));
+      if (appeared.length !== 1) continue;
+      if (usedTitles.has(appeared[0])) continue; // a project already has that name
+      plan.renameProjects.push({ projectId, from: project.title, to: appeared[0] });
     }
   }
   return plan;

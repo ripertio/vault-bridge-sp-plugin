@@ -51,6 +51,12 @@ export interface LocalUserCfgV2 {
   _dailyRolloverDay?: string;
   // projectId → folder name for auto project sync. Stable identity for renames.
   _projectLinks?: Record<string, string>;
+  // SP project IDs the user unlinked after their folder was deleted. No folder is
+  // created for them again while they stay in this list.
+  _unlinkedProjectIds?: string[];
+  // Folder names as the last sync run saw them. Used to tell a new folder (a rename
+  // target) from one that was already there.
+  _knownFolders?: string[];
 }
 
 // Legacy interface for migration

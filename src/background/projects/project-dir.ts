@@ -12,6 +12,9 @@ export interface ProjectsDirCfg {
   folderBinds?: Record<string, string>;
   // Markdown file name created in each project folder and synced with its SP project.
   taskFileName: string;
+  // Off by default. When on, deleting a linked folder asks in SP whether to remove the
+  // project or unlink it. Nothing is removed without that answer.
+  confirmFolderDelete: boolean;
 }
 
 export const DEFAULT_PROJECTS_DIR_CFG: ProjectsDirCfg = {
@@ -20,6 +23,7 @@ export const DEFAULT_PROJECTS_DIR_CFG: ProjectsDirCfg = {
   excluded: [],
   folderBinds: {},
   taskFileName: 'backlog.md',
+  confirmFolderDelete: false,
 };
 
 export type ProjectsDirValidation =

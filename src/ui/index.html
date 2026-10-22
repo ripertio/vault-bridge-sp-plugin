@@ -163,6 +163,10 @@
             <p class="file-hint">Changing this points existing folders at the new name. Rename the files in the vault to match.</p>
           </div>
           <div class="form-group">
+            <label><input type="checkbox" id="projectsConfirmDelete" /> When a linked folder is deleted, ask in Super Productivity: unlink the project or remove it</label>
+            <p class="file-hint">Off: a deleted folder is created again on the next sync. On: nothing is removed without your answer.</p>
+          </div>
+          <div class="form-group">
             <label for="projectsExcluded">Excluded (one name per line, folder or project title)</label>
             <textarea id="projectsExcluded" rows="4" placeholder="Old project"></textarea>
           </div>
@@ -706,6 +710,7 @@
         document.getElementById('projectsAuto').checked = !!p.enabled;
         document.getElementById('projectsDir').value = p.projectsDir ?? 'Projects';
         document.getElementById('taskFileName').value = p.taskFileName ?? 'backlog.md';
+        document.getElementById('projectsConfirmDelete').checked = !!p.confirmFolderDelete;
         document.getElementById('projectsExcluded').value = (p.excluded || []).join('\n');
       }
 
@@ -726,6 +731,7 @@
           enabled: document.getElementById('projectsAuto').checked,
           projectsDir: document.getElementById('projectsDir').value.trim(),
           taskFileName: document.getElementById('taskFileName').value.trim(),
+          confirmFolderDelete: document.getElementById('projectsConfirmDelete').checked,
           excluded: document.getElementById('projectsExcluded').value.split('\n'),
         };
         try {

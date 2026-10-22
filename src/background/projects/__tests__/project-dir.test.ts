@@ -18,7 +18,14 @@ describe('validateProjectsDirCfg', () => {
     const r = validateProjectsDirCfg({ projectsDir: 'Projects/', excluded: [' Old ', 'Old', ''] });
     expect(r).toEqual({
       ok: true,
-      cfg: { enabled: false, projectsDir: 'Projects', excluded: ['Old'], folderBinds: {}, taskFileName: 'backlog.md' },
+      cfg: {
+        enabled: false,
+        projectsDir: 'Projects',
+        excluded: ['Old'],
+        folderBinds: {},
+        taskFileName: 'backlog.md',
+        confirmFolderDelete: false,
+      },
     });
   });
 

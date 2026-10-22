@@ -18,6 +18,7 @@
     "deleteTask",
     "getAllProjects",
     "addProject",
+    "deleteProject",
     "nodeExecution",
     "persistDataSynced",
     "loadSyncedData",

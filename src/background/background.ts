@@ -31,6 +31,9 @@ import { createSpProject } from './sync/missing-resource';
 import { planReconcile } from './projects/reconcile';
 import { runProjectsReconcile } from './projects/reconcile-run';
 import { matchFoldersToProjects } from './projects/project-dir';
+import { findDeletedFolders } from './projects/folder-delete';
+import type { DeletedFolder } from './projects/folder-delete';
+import { showDeletedFolderDialog } from './projects/folder-delete-dialog';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
 declare const __PLUGIN_VERSION__: string;
@@ -239,6 +242,48 @@ const maybeCheckForUpdate = async (isStartup = false): Promise<void> => {
  * there is no polling or persistedDataChanged round-trip anymore, because the UI
  * and background share this process and the change arrives synchronously here.
  */
+// Deleted-folder questions already shown this session, by project id. Cleared on
+// restart, so an unanswered question comes back then.
+const askedDeletedFolders = new Set<string>();
+
+// Ask in SP what to do with a project whose linked folder was deleted. A dry-run only
+// logs. Unlink keeps the project and stops its folder from being created again.
+// Remove deletes the project (and its tasks) only after the user presses that button.
+const askAboutDeletedFolder = (deleted: DeletedFolder, title: string, writeMode: boolean): void => {
+  if (askedDeletedFolders.has(deleted.projectId)) return;
+  if (!writeMode) {
+    log.log(`would ask what to do with deleted folder "${deleted.folder}" (project "${title}")`);
+    return;
+  }
+  askedDeletedFolders.add(deleted.projectId);
+  void showDeletedFolderDialog(deleted.folder, title, {
+    onUnlink: () => {
+      const links = { ...(currentConfig._projectLinks ?? {}) };
+      delete links[deleted.projectId];
+      const unlinked = [...new Set([...(currentConfig._unlinkedProjectIds ?? []), deleted.projectId])];
+      currentConfig = { ...currentConfig, _projectLinks: links, _unlinkedProjectIds: unlinked };
+      persistConfig();
+      log.log(`unlinked "${title}" (folder "${deleted.folder}" was deleted)`);
+      void startBindings();
+    },
+    onRemoveProject: async () => {
+      const api = PluginAPI as unknown as { deleteProject?: (id: string) => Promise<void> };
+      if (typeof api.deleteProject !== 'function') {
+        PluginAPI.showSnack({ msg: 'sync.md Multi: removing a project is not available in this SP version', type: 'ERROR' });
+        return;
+      }
+      try {
+        await api.deleteProject(deleted.projectId);
+        log.log(`removed SP project "${title}" (folder "${deleted.folder}" was deleted)`);
+        void startBindings();
+      } catch (err) {
+        log.error(`could not remove SP project "${title}"`, err);
+        PluginAPI.showSnack({ msg: `sync.md Multi: could not remove project "${title}"`, type: 'ERROR' });
+      }
+    },
+  });
+};
+
 // Bindings that should run now: the manual list, or the folder-derived list when
 // auto mode is on. A failed folder scan starts nothing (see effective-bindings.ts).
 const startBindings = async (): Promise<void> => {
@@ -254,9 +299,11 @@ const startBindings = async (): Promise<void> => {
       const projects = (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title }));
       const writeMode = !dailyCfg().dryRun;
       const links = currentConfig._projectLinks ?? {};
+      // Folders as the last run saw them. A new folder since then is a rename target.
+      const previousFolders = currentConfig._knownFolders ?? null;
 
       // Renames first, so the reconcile below sees the already-renamed folders.
-      const renames = planRenames(links, folders, projects);
+      const renames = planRenames(links, folders, projects, previousFolders);
       for (const r of renames.renameFolders) {
         log.log(`rename folder "${r.from}" → "${r.to}"${writeMode ? '' : ' (dry-run)'}`);
         if (writeMode) await renameSubfolder(absDir, r.from, r.to);
@@ -273,15 +320,40 @@ const startBindings = async (): Promise<void> => {
         : projects;
 
       const match = matchFoldersToProjects(renamedFolders, renamedProjects, projectsDir.excluded);
+      // Opt-in: a linked folder that vanished is a question for the user, not a reason to
+      // recreate it. Checked against the folders before this run's renames.
+      const projectIds = new Set(projects.map((p) => p.id));
+      const renamedIds = new Set(renames.renameProjects.map((r) => r.projectId));
+      const deleted = projectsDir.confirmFolderDelete
+        ? findDeletedFolders(links, folders, projectIds, renamedIds)
+        : [];
+      for (const d of deleted) {
+        askAboutDeletedFolder(d, projects.find((p) => p.id === d.projectId)?.title ?? d.folder, writeMode);
+      }
       // Remember folder ↔ project pairs so a later rename can be told apart from a
       // delete + create. Only saved in write mode, so a dry-run changes nothing.
       if (writeMode) {
         const nextLinks: Record<string, string> = {};
         for (const m of match.matched) nextLinks[m.projectId] = m.folder;
-        currentConfig = { ...currentConfig, _projectLinks: nextLinks };
+        // A deleted folder keeps its link until the user answers the question.
+        for (const d of deleted) nextLinks[d.projectId] = d.folder;
+        const matchedIds = new Set(match.matched.map((m) => m.projectId));
+        const unlinked = (currentConfig._unlinkedProjectIds ?? []).filter(
+          (id) => projectIds.has(id) && !matchedIds.has(id),
+        );
+        currentConfig = {
+          ...currentConfig,
+          _projectLinks: nextLinks,
+          _unlinkedProjectIds: unlinked,
+          _knownFolders: renamedFolders,
+        };
         persistConfig();
       }
-      await runProjectsReconcile(planReconcile(match), absDir, projectsDir.taskFileName, dailyCfg().dryRun, {
+      // Projects still waiting on the deleted-folder question, or unlinked, get no folder.
+      const plan = planReconcile(match);
+      const held = new Set([...deleted.map((d) => d.projectId), ...(currentConfig._unlinkedProjectIds ?? [])]);
+      plan.foldersToCreate = plan.foldersToCreate.filter((p) => !held.has(p.id));
+      await runProjectsReconcile(plan, absDir, projectsDir.taskFileName, dailyCfg().dryRun, {
         createProject: createSpProject,
         writeBacklog: async (binding) => {
           await spToMd(binding);
