@@ -325,7 +325,13 @@ const askAboutRename = (r: PendingRename, absDir: string): void => {
         if (k !== folder && v !== r.projectId) binds[k] = v;
       }
       binds[folder] = r.projectId;
-      currentConfig = { ...currentConfig, projectsDir: { ...dirCfg, folderBinds: binds } };
+      // The link must name the folder the project is bound to. A stale link to the other
+      // name makes the sync treat the project as folder-less and create a second folder.
+      currentConfig = {
+        ...currentConfig,
+        projectsDir: { ...dirCfg, folderBinds: binds },
+        _projectLinks: { ...(currentConfig._projectLinks ?? {}), [r.projectId]: folder },
+      };
       persistConfig();
       log.log(`kept "${r.from}" and "${r.to}" as they are, bound folder "${folder}"`);
       void startBindings();
