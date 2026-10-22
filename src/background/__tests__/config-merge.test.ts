@@ -28,9 +28,31 @@ describe('mergeUiConfig', () => {
     expect(merged.projectsDir).toEqual(current.projectsDir);
   });
 
-  it('treats a save without bindings as an empty list, not as a reason to drop state', () => {
+  it('keeps the current bindings when the save has no bindings list', () => {
     const merged = mergeUiConfig(current, undefined);
-    expect(merged.bindings).toEqual([]);
+    expect(merged.bindings).toEqual(current.bindings);
     expect(merged._projectLinks).toEqual({ p1: 'Sync Files SP' });
+  });
+
+  it('keeps the current bindings when a partial save omits them', () => {
+    const merged = mergeUiConfig(current, { version: 2 });
+    expect(merged.bindings).toEqual(current.bindings);
+  });
+
+  it('clears the bindings when the panel sends an empty list', () => {
+    expect(mergeUiConfig(current, { version: 2, bindings: [] }).bindings).toEqual([]);
+  });
+
+  it('does not bring back a binding whose project already has a folder bind', () => {
+    const withFolderBind: LocalUserCfgV2 = {
+      ...current,
+      projectsDir: { ...current.projectsDir, folderBinds: { 'Inbox/backlog.md': 'p1' } },
+    };
+    const stale = [
+      { id: 'a', filePath: '/v/Projects/Inbox/backlog.md', projectId: 'p1', enabled: true },
+      { id: 'b', filePath: '/v/other.md', projectId: 'p3', enabled: true },
+    ];
+    const merged = mergeUiConfig(withFolderBind, { version: 2, bindings: stale });
+    expect(merged.bindings).toEqual([stale[1]]);
   });
 });

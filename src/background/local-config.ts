@@ -130,13 +130,20 @@ export const saveLocalConfig = (config: LocalUserCfgV2): void => {
 /**
  * Merge a config pushed from the config panel. The panel manages only `version` and
  * `bindings`; every other field (links, folder state, vault path, daily and projects
- * settings, caches) is kept from the current config. Pure.
+ * settings, caches) is kept from the current config. A save with no bindings list keeps
+ * the current bindings. Bindings whose project already has a folder bind are dropped:
+ * migration moved them there, and a stale panel must not bring them back as duplicates.
+ * An explicit empty list clears the bindings. Pure.
  */
 export const mergeUiConfig = (
   current: LocalUserCfgV2,
   incoming: Partial<LocalUserCfgV2> | undefined,
-): LocalUserCfgV2 => ({
-  ...current,
-  version: incoming?.version ?? 2,
-  bindings: incoming?.bindings ?? [],
-});
+): LocalUserCfgV2 => {
+  const folderBoundIds = new Set(Object.values(current.projectsDir?.folderBinds ?? {}));
+  const bindings = Array.isArray(incoming?.bindings) ? incoming.bindings : current.bindings;
+  return {
+    ...current,
+    version: incoming?.version ?? 2,
+    bindings: bindings.filter((b) => !folderBoundIds.has(b.projectId)),
+  };
+};
