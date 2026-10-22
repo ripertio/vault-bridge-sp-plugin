@@ -5,7 +5,7 @@ import {
   shutdownSyncRegistry,
   isStructuralTaskAction,
 } from './sync/sync-manager';
-import { loadLocalConfig, saveLocalConfig } from './local-config';
+import { loadLocalConfig, saveLocalConfig, mergeUiConfig } from './local-config';
 import type { LocalUserCfgV2, SyncBindingCfg } from './local-config';
 import { fetchLatestRelease, isNewerVersion } from './update-check';
 import type { UpdateInfo } from './update-check';
@@ -630,23 +630,7 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
   try {
     const newBindingsJson = JSON.stringify(incoming?.bindings ?? []);
     const bindingsChanged = newBindingsJson !== activeBindingsJson;
-    // Take version + bindings from the UI; preserve every field the UI does not
-    // manage from the in-memory source of truth (never reverted by a UI save).
-    currentConfig = {
-      version: incoming?.version ?? 2,
-      bindings: incoming?.bindings ?? [],
-      _lastSynced: currentConfig._lastSynced ?? {},
-      _cachedProjects: currentConfig._cachedProjects,
-      _lastUpdateCheck: currentConfig._lastUpdateCheck,
-      _latestVersion: currentConfig._latestVersion,
-      _latestUrl: currentConfig._latestUrl,
-      // Bindings saves keep the stored daily settings; daily is saved via saveDailySettings.
-      daily: currentConfig.daily,
-      projectsDir: currentConfig.projectsDir,
-      _dailyBaseline: currentConfig._dailyBaseline,
-      _dailyBaselineDay: currentConfig._dailyBaselineDay,
-      _dailyRolloverDay: currentConfig._dailyRolloverDay,
-    };
+    currentConfig = mergeUiConfig(currentConfig, incoming);
     persistConfig();
     if (bindingsChanged) {
       log.log('[sync-md] Config saved from UI — restarting sync registry');

@@ -121,3 +121,17 @@ export const saveLocalConfig = (config: LocalUserCfgV2): void => {
     console.error('[sync-md] Failed to save config:', error);
   }
 };
+
+/**
+ * Merge a config pushed from the config panel. The panel manages only `version` and
+ * `bindings`; every other field (links, folder state, vault path, daily and projects
+ * settings, caches) is kept from the current config. Pure.
+ */
+export const mergeUiConfig = (
+  current: LocalUserCfgV2,
+  incoming: Partial<LocalUserCfgV2> | undefined,
+): LocalUserCfgV2 => ({
+  ...current,
+  version: incoming?.version ?? 2,
+  bindings: incoming?.bindings ?? [],
+});
