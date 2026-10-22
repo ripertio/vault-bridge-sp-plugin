@@ -33,7 +33,6 @@ import { buildLinkTable, ignoreRow, unignoreRow } from './projects/link-table';
 import { validFolderName, validBindFile } from './projects/project-dir';
 import { INBOX_PROJECT_ID } from './daily/daily-plan';
 import { lazySetInterval } from './helper/lazy-set-interval';
-import { setIgnoreTagEnabled } from './sync/ignore-tag';
 import { setInboxRemoveDone } from './sync/inbox-done';
 import { spToMd } from './sync/sp-to-md';
 import { createSpProject } from './sync/missing-resource';
@@ -433,8 +432,6 @@ const inboxBindings = async (vaultPath: string): Promise<SyncBindingCfg[]> => {
 // auto mode is on. A failed folder scan starts nothing (see effective-bindings.ts).
 const startBindings = async (): Promise<void> => {
   const projectsDir = resolveProjectsDirCfg(currentConfig.projectsDir);
-  // The #ignore rule is read by the sync code at each sync, so it is set before any sync.
-  setIgnoreTagEnabled(projectsDir.respectIgnoreTag);
   setInboxRemoveDone(currentConfig.inboxRemoveDone === true);
   const vaultPath = effectiveVaultPath(currentConfig);
 

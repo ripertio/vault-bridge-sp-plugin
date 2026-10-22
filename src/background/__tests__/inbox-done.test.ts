@@ -19,7 +19,7 @@ describe('removesDone', () => {
 
 describe('a done task leaves the file when it is not in the task map', () => {
   it('removes its line', () => {
-    const out = mergeSpIntoExistingFile('- [x] <!--d1--> Done\n- [ ] <!--o2--> Open\n', new Map(), [], new Set());
+    const out = mergeSpIntoExistingFile('- [x] <!--d1--> Done\n- [ ] <!--o2--> Open\n', new Map(), []);
     expect(out).not.toContain('d1');
   });
 });
