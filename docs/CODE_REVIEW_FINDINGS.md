@@ -9,7 +9,7 @@ Result of a `/code-review` run on 2026-10-22, branch `feature/obsidian-sync`. Te
 | 3 | Startup | `src/background/background.ts:897` | An Inbox-only setup does not start syncing after a restart (fixed) |
 | 4 | Daily notes | `src/background/background.ts:1031` | Changing the vault path does not restart the daily-note watcher |
 | 5 | Daily notes | `src/background/daily/daily-runner.ts:112` | A task missing from `getTasks()` is treated as gone and its line is removed |
-| 6 | Daily notes | `src/background/daily/daily-runner.ts:74` | The reverse diff uses the raw baseline, not the day-scoped one |
+| 6 | Daily notes | `src/background/daily/daily-runner.ts:74` | The reverse diff uses the raw baseline, not the day-scoped one (fixed) |
 | 7 | Projects | `src/background/background.ts:454` | `startBindings` has no serialization and can undo its own updates (fixed) |
 | 8 | Config | `src/background/local-config.ts:150` | `mergeUiConfig` can wipe or resurrect manual bindings (fixed) |
 | 9 | Projects | `src/background/projects/project-dir.ts:115` | File binds only match if every caller merges bound files into the folder list (fixed) |
@@ -66,6 +66,8 @@ The startup run, the watcher's `notifyOnCreate`, `taskUpdate` and the day-change
 **Scenario.** Yesterday's baseline holds task X as `isDone=false`. Today X is carried into the note, or typed with the same ID, in a different state. The diff treats the difference as a user edit and pushes a title or `isDone` update to SP.
 
 **Direction.** Pass `baselineForToday` to the diff.
+
+**Fixed.** The reverse diff now receives `baselineForToday`. Tested in `src/background/daily/__tests__/daily-runner.test.ts`.
 
 ## 7. `startBindings` has no serialization
 

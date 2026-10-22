@@ -71,7 +71,7 @@ export const runDailyNoteDryRun = async (
   // The baseline lists IDs from the note of the day it was saved on. On a new day
   // those IDs are not missing from today's note, they were never in it.
   const baselineForToday = deps.getBaselineDay?.() === today ? baseline : {};
-  const reverse = diffNoteAgainstBaseline(lines, baseline, spIsDone);
+  const reverse = diffNoteAgainstBaseline(lines, baselineForToday, spIsDone);
   log.log(`daily ${cfg.dryRun ? 'dry-run' : 'sync'} ${notePath}`);
   reverse.forEach((c) => log.log(`  ← note ${c.taskId} ${JSON.stringify(c.updates)}`));
   if (!cfg.dryRun) {

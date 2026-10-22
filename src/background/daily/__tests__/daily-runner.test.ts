@@ -296,6 +296,23 @@ describe('runDailyNoteDryRun baseline day', () => {
     expect(batch).not.toHaveBeenCalled();
   });
 
+  it('does not push a checkbox edit against yesterday baseline to SP', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [x] <!--p1--> Project task\n');
+    const updateTask = jest.fn().mockResolvedValue(undefined);
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: [] }]),
+      getTasks: jest.fn().mockResolvedValue([{ id: 'p1', title: 'Project task', isDone: false, projectId: 'S3' }]),
+      updateTask,
+    };
+    const yesterday = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      getBaselineDay: () => '2026-10-20',
+      saveBaseline: jest.fn(),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, yesterday, NOW);
+    expect(updateTask).not.toHaveBeenCalled();
+  });
+
   it('forgets yesterday baseline entries once it writes the new day note', async () => {
     mockedRead.mockResolvedValue('## To Dos\n');
     setSp(['i1']);
