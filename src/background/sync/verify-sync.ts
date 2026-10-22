@@ -1,6 +1,6 @@
 import type { Task } from '@super-productivity/plugin-api';
 import { readTasksFile } from '../helper/file-utils';
-import { parseMarkdown } from './markdown-parser';
+import { parseMarkdown, parseMarkdownGroup } from './markdown-parser';
 import { SyncBindingCfg } from '../local-config';
 
 export interface SyncVerificationResult {
@@ -21,6 +21,8 @@ export interface SyncDifference {
  */
 export const verifySyncState = async (
   config: SyncBindingCfg,
+  // Every file of the project, main first, when the project has more than one.
+  groupContents?: string[],
 ): Promise<SyncVerificationResult> => {
   const differences: SyncDifference[] = [];
 
@@ -32,7 +34,7 @@ export const verifySyncState = async (
     const spTasks = allTasks.filter((task) => task.projectId === config.projectId);
 
     // Get tasks from markdown
-    const mdContent = await readTasksFile(config.filePath);
+    const mdContent = groupContents ? groupContents.join('\n') : await readTasksFile(config.filePath);
     if (!mdContent) {
       if (spTasks.length > 0) {
         differences.push({
@@ -43,7 +45,7 @@ export const verifySyncState = async (
       return { isInSync: differences.length === 0, differences };
     }
 
-    const mdTasks = parseMarkdown(mdContent);
+    const mdTasks = groupContents ? parseMarkdownGroup(groupContents).tasks : parseMarkdown(mdContent);
 
     // Create maps for quick lookup
     const spTaskMap = new Map<string, Task>();

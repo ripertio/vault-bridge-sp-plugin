@@ -26,6 +26,7 @@ describe('validateProjectsDirCfg', () => {
         taskFileName: 'backlog.md',
         confirmFolderDelete: false,
         excludeRemovedProjects: false,
+        syncAllFiles: false,
       },
     });
   });

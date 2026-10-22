@@ -11,6 +11,9 @@ export interface SyncBindingCfg {
   // recreate the project under its original name (SP does not expose the name of
   // an already-deleted project). Falls back to the file name when absent.
   projectTitle?: string;
+  // Every file synced with this project, main file first. Set only when the project folder
+  // has more than one (see ProjectsDirCfg.syncAllFiles). The main file receives new tasks.
+  groupPaths?: string[];
 }
 
 export interface LocalUserCfgV2 {

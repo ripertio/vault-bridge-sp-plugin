@@ -285,3 +285,58 @@ export const listExistingFiles = async (dirPath: string, relPaths: string[]): Pr
   }
   return nodeResult.names ?? [];
 };
+
+/**
+ * The .md files inside each of the given sub-folders of `dirPath`, including their own
+ * sub-folders, as folder name → sorted paths relative to that folder ("a.md", "sub/b.md").
+ * Read-only, one call for all folders. Hidden entries and symbolic links are skipped, so
+ * a link cannot lead a sync outside the vault. Nesting is limited to 6 levels.
+ */
+export const listMarkdownFilesByFolder = async (
+  dirPath: string,
+  folders: string[],
+): Promise<Record<string, string[]>> => {
+  if (folders.length === 0) return {};
+  const result = await PluginAPI.executeNodeScript!({
+    script: `
+      const fs = require('fs');
+      const path = require('path');
+      try {
+        const dir = path.resolve(args[0]);
+        const out = {};
+        for (const folder of args[1]) {
+          const found = [];
+          const walk = (rel, depth) => {
+            let entries;
+            try {
+              entries = fs.readdirSync(path.join(dir, folder, rel), { withFileTypes: true });
+            } catch {
+              return;
+            }
+            for (const e of entries) {
+              if (e.name.startsWith('.')) continue;
+              const child = rel ? rel + '/' + e.name : e.name;
+              if (e.isFile() && /\\.md$/i.test(e.name)) found.push(child);
+              else if (e.isDirectory() && depth < 6) walk(child, depth + 1);
+            }
+          };
+          walk('', 0);
+          out[folder] = found.sort();
+        }
+        return { success: true, files: out };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    `,
+    args: [dirPath, folders],
+    timeout: 10000,
+  });
+
+  const nodeResult = result.result as
+    | { success: boolean; files?: Record<string, string[]>; error?: string }
+    | undefined;
+  if (!result.success || !nodeResult?.success) {
+    throw new Error(nodeResult?.error || toErrorMessage(result.error) || 'Failed to list files');
+  }
+  return nodeResult.files ?? {};
+};

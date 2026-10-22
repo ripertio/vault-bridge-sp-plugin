@@ -1,6 +1,6 @@
 import { startFileWatcher } from './file-watcher';
-import { spToMd } from './sp-to-md';
-import { mdToSp } from './md-to-sp';
+import { spToMd, SpToMdGroup } from './sp-to-md';
+import { mdToSp, MdToSpResult } from './md-to-sp';
 import { getFileStats, readTasksFile, writeTasksFile } from '../helper/file-utils';
 import { canonicalizePathKey } from '../helper/path-utils';
 import { hashContent } from '../helper/hash';
@@ -26,7 +26,9 @@ const SP_HOOKS = {
   ACTION: 'action' as unknown as PluginHooks,
 } as const;
 import { SyncBindingCfg } from '../local-config';
-import { logSyncVerification, verifySyncState } from './verify-sync';
+import { logSyncVerification, verifySyncState, SyncVerificationResult } from './verify-sync';
+import { createSerialQueue } from '../helper/serial-queue';
+import { stripStatusTags } from './markdown-parser';
 import {
   showMissingFileDialog,
   showMissingProjectDialog,
@@ -133,6 +135,81 @@ export const fileHasUnsyncedEdit = (
   lastSyncedContentHash: string | null,
 ): boolean =>
   lastSyncedContentHash === null || currentContentHash !== lastSyncedContentHash;
+
+// ── Projects with more than one file ───────────────────────────────────────
+// Every file of such a project has its own session, but they share one SP project. Their
+// syncs run one at a time per project, so a task created from an extra file is stamped
+// there before the main file's write-back looks for tasks that no file holds yet.
+const projectQueues = new Map<string, ReturnType<typeof createSerialQueue>>();
+const withProjectLock = <T>(session: SyncSession, job: () => Promise<T>): Promise<T> => {
+  if (!session.config.groupPaths) return job();
+  let queue = projectQueues.get(session.config.projectId);
+  if (!queue) {
+    queue = createSerialQueue();
+    projectQueues.set(session.config.projectId, queue);
+  }
+  return queue(job);
+};
+
+const TASK_ID_LINE = /^[ \t]*- \[[ x]\]\s*<!--([^>]+)-->/gm;
+const taskIdsOf = (content: string): string[] => [...content.matchAll(TASK_ID_LINE)].map((m) => m[1]);
+const TASK_LINE_NO_ID = /^[ \t]*- \[[ x]\]\s*(?!<!--)(.+)$/gm;
+const unstampedTitlesOf = (content: string): string[] =>
+  [...content.matchAll(TASK_LINE_NO_ID)].map((m) => stripStatusTags(m[1]).trim()).filter((t) => t !== '');
+
+/**
+ * Contents of the project's other files, by path. Null when one cannot be read: acting
+ * on a partial view would treat that file's tasks as deleted, so the caller skips.
+ */
+const readSiblings = async (session: SyncSession): Promise<Map<string, string> | null> => {
+  const out = new Map<string, string>();
+  for (const path of session.config.groupPaths ?? []) {
+    if (path === session.config.filePath) continue;
+    const content = await readTasksFile(path);
+    if (content === null) {
+      log.log(`[vault-bridge] ${path} is not readable, skipping this sync of ${session.config.filePath}`);
+      return null;
+    }
+    out.set(path, content);
+  }
+  return out;
+};
+
+/** The project's files in config order (main first), with this session's own content in place. */
+const orderedContents = (session: SyncSession, own: string, siblings: Map<string, string>): string[] =>
+  (session.config.groupPaths ?? []).map((p) => (p === session.config.filePath ? own : (siblings.get(p) ?? '')));
+
+/** File → SP. Reads the whole project's files when it has several. */
+const importFile = async (session: SyncSession, content: string): Promise<MdToSpResult> => {
+  if (!session.config.groupPaths) return mdToSp(content, session.config.projectId);
+  const siblings = await readSiblings(session);
+  // Same outcome as a malformed file: SP stays as is and nothing is written back.
+  if (!siblings) return 'parse-error';
+  return mdToSp(orderedContents(session, content, siblings), session.config.projectId);
+};
+
+/** SP → file. In a multi-file project only the main file takes new tasks. */
+const writeBack = async (session: SyncSession): Promise<void> => {
+  if (!session.config.groupPaths) return spToMd(session.config);
+  const siblings = await readSiblings(session);
+  if (!siblings) return;
+  const otherFileIds = new Set([...siblings.values()].flatMap(taskIdsOf));
+  const otherFileTitles = [...siblings.values()].flatMap(unstampedTitlesOf);
+  const group: SpToMdGroup = {
+    otherFileIds,
+    otherFileTitles,
+    appendNew: session.config.groupPaths[0] === session.config.filePath,
+  };
+  return spToMd(session.config, group);
+};
+
+const verifyFile = async (session: SyncSession): Promise<SyncVerificationResult> => {
+  if (!session.config.groupPaths) return verifySyncState(session.config);
+  const siblings = await readSiblings(session);
+  const own = await readTasksFile(session.config.filePath);
+  if (!siblings || own === null) return { isInSync: true, differences: [] };
+  return verifySyncState(session.config, orderedContents(session, own, siblings));
+};
 
 /** Mark a session as having synced now, and report it to the config owner. */
 const markSynced = async (session: SyncSession): Promise<void> => {
@@ -311,7 +388,7 @@ const handleMissingFile = async (session: SyncSession): Promise<void> => {
   try {
     await showMissingFileDialog(session.config.filePath, {
       onRecreate: async () => {
-        await spToMd(session.config);
+        await writeBack(session);
         await markSynced(session);
         PluginAPI.showSnack({
           msg: `Vault Bridge: "${session.config.filePath}" recreated from SP.`,
@@ -476,7 +553,7 @@ const handleMissingProject = async (
                 return;
               }
             }
-            await spToMd(session.config);
+            await writeBack(session);
             markSynced(session);
             PluginAPI.showSnack({
               msg: `Vault Bridge: project "${title}" recreated in SP for "${session.config.filePath}".`,
@@ -576,7 +653,10 @@ const divertIfProjectMissing = async (
   }
 };
 
-const performInitialSync = async (session: SyncSession): Promise<void> => {
+const performInitialSync = (session: SyncSession): Promise<void> =>
+  withProjectLock(session, () => performInitialSyncUnlocked(session));
+
+const performInitialSyncUnlocked = async (session: SyncSession): Promise<void> => {
   if (session.syncInProgress) return;
   session.syncInProgress = true;
 
@@ -598,7 +678,7 @@ const performInitialSync = async (session: SyncSession): Promise<void> => {
       } else {
         // Brand-new binding — write SP tasks to it (creates file with task IDs).
         // No prompt: creating the file is the expected first-time behaviour.
-        await spToMd(session.config);
+        await writeBack(session);
         await markSynced(session);
       }
     } else {
@@ -612,19 +692,19 @@ const performInitialSync = async (session: SyncSession): Promise<void> => {
       if (hasTasks) {
         // File has tasks — file is the source of truth. Import into SP, then
         // always write back so task IDs are stamped into the Markdown file.
-        const result = await mdToSp(content!, session.config.projectId);
+        const result = await importFile(session, content!);
         if (result === 'parse-error') {
           // Malformed file at startup — leave it exactly as-is (no write-back
           // that would clobber it, no markSynced) and let the watcher retry on
           // the next edit. mdToSp already warned via snack.
           return;
         }
-        await spToMd(session.config);
-        const verificationResult = await verifySyncState(session.config);
+        await writeBack(session);
+        const verificationResult = await verifyFile(session);
         logSyncVerification(verificationResult, `initial sync [${session.config.id}]`);
       } else {
         // File exists but has no task lines — write SP tasks to it.
-        await spToMd(session.config);
+        await writeBack(session);
       }
       await markSynced(session);
     }
@@ -660,7 +740,10 @@ const handleFileChange = (session: SyncSession): void => {
   }, SYNC_DEBOUNCE_MS_MD_TO_SP);
 };
 
-const executeMdToSpSync = async (session: SyncSession): Promise<void> => {
+const executeMdToSpSync = (session: SyncSession): Promise<void> =>
+  withProjectLock(session, () => executeMdToSpSyncUnlocked(session));
+
+const executeMdToSpSyncUnlocked = async (session: SyncSession): Promise<void> => {
   if (session.syncInProgress) return;
   session.syncInProgress = true;
   session.pendingMdToSpSync = false;
@@ -682,7 +765,7 @@ const executeMdToSpSync = async (session: SyncSession): Promise<void> => {
       // readTasksFile returns null on ENOENT — the file was deleted. Prompt.
       await handleMissingFile(session);
     } else if (content) {
-      const result = await mdToSp(content, session.config.projectId);
+      const result = await importFile(session, content);
       if (result === 'parse-error') {
         // The file is malformed. mdToSp left SP untouched; we must ALSO leave
         // the file untouched — a SP→MD write-back here would overwrite the
@@ -692,9 +775,9 @@ const executeMdToSpSync = async (session: SyncSession): Promise<void> => {
         return;
       }
 
-      const verificationResult = await verifySyncState(session.config);
+      const verificationResult = await verifyFile(session);
       if (!verificationResult.isInSync) {
-        await spToMd(session.config);
+        await writeBack(session);
       }
       await markSynced(session);
     }
@@ -972,7 +1055,7 @@ const handleSpChange = (session: SyncSession): void => {
   if (Date.now() - session.lastMdToSpSyncTimestamp < SP_HOOK_COOLDOWN_MS) return;
   if (session.spToMdDebounceTimer) clearTimeout(session.spToMdDebounceTimer);
 
-  session.spToMdDebounceTimer = setTimeout(async () => {
+  session.spToMdDebounceTimer = setTimeout(() => void withProjectLock(session, async () => {
     if (session.syncInProgress) return;
     if (Date.now() - session.lastMdToSpSyncTimestamp < SP_HOOK_COOLDOWN_MS) return;
 
@@ -1007,14 +1090,14 @@ const handleSpChange = (session: SyncSession): void => {
       const content = await readTasksFile(session.config.filePath);
       const currentHash = content === null ? null : hashContent(content);
       if (content && fileHasUnsyncedEdit(currentHash, session.lastSyncedContentHash)) {
-        const result = await mdToSp(content, session.config.projectId);
+        const result = await importFile(session, content);
         // Malformed file — leave both the file and SP as-is (no SP→MD write-back
         // that would overwrite the edit). The watcher retries on the next edit.
         if (result === 'parse-error') return;
       }
 
-      await spToMd(session.config);
-      await verifySyncState(session.config);
+      await writeBack(session);
+      await verifyFile(session);
       await markSynced(session);
     } finally {
       if (isCurrent(session)) {
@@ -1024,7 +1107,7 @@ const handleSpChange = (session: SyncSession): void => {
       }
       session.syncInProgress = false;
     }
-  }, SYNC_DEBOUNCE_MS);
+  }), SYNC_DEBOUNCE_MS);
 };
 
 /**
@@ -1067,7 +1150,7 @@ export const syncAllNow = (): void => {
     session.syncInProgress = true;
     if (session.stopWatcher) session.stopWatcher();
 
-    (async () => {
+    withProjectLock(session, async () => {
       // Project gone? Prompt (recreate / delete) before spToMd wipes the file.
       if (await divertIfProjectMissing(session)) return;
       // If the file is gone, prompt (recreate / delete / ignore) instead of
@@ -1088,7 +1171,7 @@ export const syncAllNow = (): void => {
       if (fileChangedSinceSync) {
         // MD → SP first: the pending file edit wins…
         if (content) {
-          const result = await mdToSp(content, session.config.projectId);
+          const result = await importFile(session, content);
           if (result === 'parse-error') {
             // Malformed file — leave it untouched (no SP→MD write-back that
             // would overwrite the edit) and abort this manual sync. `finally`
@@ -1097,18 +1180,18 @@ export const syncAllNow = (): void => {
           }
         }
         // …then SP → MD to write the merged state back (stamps new IDs, etc.).
-        await spToMd(session.config);
+        await writeBack(session);
       } else {
         // No pending file edit: SP → MD first to capture hook-less SP changes
         // (e.g. task moves), then read any remaining differences back.
-        await spToMd(session.config);
+        await writeBack(session);
         const after = await readTasksFile(session.config.filePath);
         if (after) {
-          await mdToSp(after, session.config.projectId);
+          await importFile(session, after);
         }
       }
       await markSynced(session);
-    })()
+    })
       .catch((error) => {
         log.error(`[vault-bridge] syncAllNow failed for ${session.config.id}:`, error);
         PluginAPI.showSnack({
@@ -1143,6 +1226,7 @@ export const shutdownSyncRegistry = (): void => {
   openDialogBindings.clear();
   recreatingBindings.clear();
   lastPromptAt.clear();
+  projectQueues.clear();
 };
 
 export const _resetForTesting = (): void => {
@@ -1151,6 +1235,7 @@ export const _resetForTesting = (): void => {
   openDialogBindings.clear();
   recreatingBindings.clear();
   lastPromptAt.clear();
+  projectQueues.clear();
 };
 
 const setupWindowFocusTracking = (): void => {

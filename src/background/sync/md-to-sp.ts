@@ -1,4 +1,4 @@
-import { parseMarkdownWithHeader } from './markdown-parser';
+import { parseMarkdownGroup, parseMarkdownWithHeader } from './markdown-parser';
 import { removesDone } from './inbox-done';
 import { generateTaskOperations } from './generate-task-operations';
 // import { Task } from '@super-productivity/plugin-api';
@@ -37,12 +37,16 @@ export type MdToSpResult = 'ok' | 'parse-error';
  * Uses the new generateTaskOperations function for proper bidirectional sync
  */
 export const mdToSp = async (
-  markdownContent: string,
+  // One file, or every file of the project (main file first). A task counts as deleted
+  // only when its line is in none of them, so moving a line between files keeps the task.
+  markdownContent: string | string[],
   projectId: string,
 ): Promise<MdToSpResult> => {
   try {
     // Parse markdown with error tracking
-    const parseResult = parseMarkdownWithHeader(markdownContent);
+    const parseResult = Array.isArray(markdownContent)
+      ? parseMarkdownGroup(markdownContent)
+      : parseMarkdownWithHeader(markdownContent);
     const parsedTasks = parseResult.tasks;
 
     // Abort on any parse error, BEFORE touching SP. A parse error means we could

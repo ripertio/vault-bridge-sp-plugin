@@ -25,7 +25,7 @@ import { resolveDailyNoteCfg } from './daily/daily-note';
 import { validateDailySettings } from './daily/daily-settings';
 import { validateProjectsDirCfg, resolveProjectsDirCfg } from './projects/project-dir';
 import { computeEffectiveBindings } from './projects/effective-bindings';
-import { assertRealPathInside, listSubfolders, renameSubfolder } from './helper/file-utils';
+import { assertRealPathInside, listMarkdownFilesByFolder, listSubfolders, renameSubfolder } from './helper/file-utils';
 import { planRenames } from './projects/rename';
 import { migrateManualBindings } from './projects/migrate-bindings';
 import { effectiveVaultPath, validateVaultPath } from './vault';
@@ -545,6 +545,7 @@ const runStartBindings = async (): Promise<void> => {
         listProjectEntries(effectiveVaultPath(currentConfig), dir, currentConfig.projectsDir?.folderBinds ?? {}),
       getProjects: async () =>
         (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title })),
+      listFiles: listMarkdownFilesByFolder,
     },
   );
   const inbox = await inboxBindings(vaultPath);
@@ -592,7 +593,17 @@ const startFolderPoll = (): void => {
   const absDir = `${vaultPath.replace(/[\\/]+$/, '')}/${cfg.projectsDir}`;
   stopFolderPoll = lazySetInterval(async () => {
     try {
-      const folders = await listProjectEntries(vaultPath, absDir, cfg.folderBinds ?? {});
+      const entries = await listProjectEntries(vaultPath, absDir, cfg.folderBinds ?? {});
+      // With every file synced, a file added to or removed from a folder changes the bindings too.
+      const files = cfg.syncAllFiles
+        ? Object.entries(
+            await listMarkdownFilesByFolder(
+              absDir,
+              entries.filter((e) => !/\.md$/i.test(e)),
+            ),
+          ).flatMap(([folder, names]) => names.map((n) => `${folder}/${n}`))
+        : [];
+      const folders = [...entries, ...files];
       if (folderListChanged(lastFolderList, folders)) {
         lastFolderList = folders;
         await startBindings();

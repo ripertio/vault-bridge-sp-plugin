@@ -69,7 +69,18 @@ export const buildTaskLine = (
  * When the file does not yet exist it generates the content from scratch using
  * the same `convertTasksToMarkdown` helper that was used before.
  */
-export const spToMd = async (config: SyncBindingCfg): Promise<void> => {
+export interface SpToMdGroup {
+  // IDs on task lines of the project's other files. Those tasks live there, so this file
+  // neither stamps them onto no-ID lines nor appends them.
+  otherFileIds: Set<string>;
+  // Titles of task lines in the other files that have no ID yet. SP tasks created from
+  // them are claimed by those files and are not appended here.
+  otherFileTitles?: string[];
+  // False for an extra file: tasks new in SP are written to the main file only.
+  appendNew: boolean;
+}
+
+export const spToMd = async (config: SyncBindingCfg, group?: SpToMdGroup): Promise<void> => {
   // Note: writeTasksFile already creates the directory if it doesn't exist.
   const allTasks = await PluginAPI.getTasks();
   const projects = await PluginAPI.getAllProjects();
@@ -110,7 +121,7 @@ export const spToMd = async (config: SyncBindingCfg): Promise<void> => {
 
   if (existingContent) {
     // In-place merge: update task lines, leave everything else untouched
-    const finalContent = mergeSpIntoExistingFile(existingContent, spTaskMap, orderedTasks);
+    const finalContent = mergeSpIntoExistingFile(existingContent, spTaskMap, orderedTasks, group);
     await writeTasksFile(config.filePath, finalContent);
   } else {
     // File doesn't exist yet: generate from scratch
@@ -337,7 +348,10 @@ export const mergeSpIntoExistingFile = (
   existingContent: string,
   spTaskMap: Map<string, Task>,
   orderedTasks: Task[],
+  group?: SpToMdGroup,
 ): string => {
+  const otherFileIds = group?.otherFileIds ?? new Set<string>();
+  const appendNew = group?.appendNew ?? true;
   const lines = existingContent.split('\n');
   const outputLines: string[] = [];
   const seenTaskIds = new Set<string>();
@@ -355,6 +369,7 @@ export const mergeSpIntoExistingFile = (
   // Used to stamp IDs onto manually written lines during the initial sync.
   const spTasksByTitle = new Map<string, Task[]>();
   spTaskMap.forEach((task) => {
+    if (task.id && otherFileIds.has(task.id)) return;
     if (!spTasksByTitle.has(task.title)) {
       spTasksByTitle.set(task.title, []);
     }
@@ -395,7 +410,7 @@ export const mergeSpIntoExistingFile = (
       if (taskId && spTaskMap.has(taskId)) {
         const spTask = spTaskMap.get(taskId)!;
         const spParentId = spTask.parentId ?? null;
-        if (spParentId !== fileParentId) {
+        if (spParentId !== fileParentId && appendNew) {
           // Bug #47: the task's parent changed in SP vs. where the file places it
           // (promotion → root; demotion / re-parent → under another task). Do NOT
           // emit here and do NOT mark it seen — it drops into the post-loop
@@ -458,7 +473,20 @@ export const mergeSpIntoExistingFile = (
   }
 
   // Distribute SP tasks that were not found anywhere in the file (new tasks).
-  const newTasks = orderedTasks.filter((task) => task.id && !seenTaskIds.has(task.id));
+  // An extra file never takes new tasks, and no file takes a task another file holds.
+  const claimedTitles = new Map<string, number>();
+  for (const title of group?.otherFileTitles ?? []) claimedTitles.set(title, (claimedTitles.get(title) ?? 0) + 1);
+  const newTasks = appendNew
+    ? orderedTasks.filter((task) => {
+        if (!task.id || seenTaskIds.has(task.id) || otherFileIds.has(task.id)) return false;
+        const claims = claimedTitles.get(task.title) ?? 0;
+        if (claims > 0) {
+          claimedTitles.set(task.title, claims - 1);
+          return false;
+        }
+        return true;
+      })
+    : [];
 
   // New subtasks whose parent is ALREADY in the file are inserted indented,
   // under that parent (issue #12). Everything else (new root tasks, plus new

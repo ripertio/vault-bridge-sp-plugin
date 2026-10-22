@@ -19,6 +19,8 @@ export const computeEffectiveBindings = async (
   deps: {
     listFolders: (dir: string) => Promise<string[]>;
     getProjects: () => Promise<ProjectRef[]>;
+    // Only called when projectsDir.syncAllFiles is on.
+    listFiles?: (dir: string, folders: string[]) => Promise<Record<string, string[]>>;
   },
 ): Promise<EffectiveBindingsResult> => {
   if (!projectsDir.enabled) return { ok: true, bindings: manual };
@@ -29,7 +31,13 @@ export const computeEffectiveBindings = async (
     const [folders, projects] = await Promise.all([deps.listFolders(absDir), deps.getProjects()]);
     const match = matchFoldersToProjects(folders, projects, projectsDir.excluded, projectsDir.folderBinds ?? {});
     const titles = Object.fromEntries(projects.map((p) => [p.id, p.title]));
-    return { ok: true, bindings: bindingsFromMatches(match, absDir, titles, projectsDir.taskFileName) };
+    const folderNames = match.matched.map((m) => m.folder).filter((f) => !/\.md$/i.test(f));
+    const filesByFolder =
+      projectsDir.syncAllFiles && deps.listFiles ? await deps.listFiles(absDir, folderNames) : {};
+    return {
+      ok: true,
+      bindings: bindingsFromMatches(match, absDir, titles, projectsDir.taskFileName, filesByFolder),
+    };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }

@@ -86,6 +86,24 @@ export const parseMarkdownWithHeader = (content: string): TaskParseResult => {
 };
 
 /**
+ * Parse several files of one project as a single task list, in the order given.
+ * Line numbers (used as temporary task ids) are shifted per file so they stay unique.
+ * Errors are collected from every file.
+ */
+export const parseMarkdownGroup = (contents: string[]): TaskParseResult => {
+  const tasks: ParsedTask[] = [];
+  const errors: string[] = [];
+  let offset = 0;
+  for (const content of contents) {
+    const result = parseMarkdownWithErrors(content);
+    tasks.push(...result.tasks.map((t) => ({ ...t, line: t.line + offset })));
+    errors.push(...result.errors);
+    offset += content.split('\n').length + 1;
+  }
+  return { tasks, errors };
+};
+
+/**
  * Parse markdown content into task objects with error collection
  * Handles tasks and subtasks (first two levels) and converts deeper levels to notes
  */
