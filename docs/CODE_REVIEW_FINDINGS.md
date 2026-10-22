@@ -8,7 +8,7 @@ Result of a `/code-review` run on 2026-10-22, branch `feature/obsidian-sync`. Te
 | 2 | Daily notes | `src/background/daily/daily-runner.ts:194` | Early return skips saving the baseline after reverse updates and deletes (fixed) |
 | 3 | Startup | `src/background/background.ts:897` | An Inbox-only setup does not start syncing after a restart (fixed) |
 | 4 | Daily notes | `src/background/background.ts:1031` | Changing the vault path does not restart the daily-note watcher (fixed) |
-| 5 | Daily notes | `src/background/daily/daily-runner.ts:112` | A task missing from `getTasks()` is treated as gone and its line is removed |
+| 5 | Daily notes | `src/background/daily/daily-runner.ts:112` | A task missing from `getTasks()` is treated as gone and its line is removed (fixed) |
 | 6 | Daily notes | `src/background/daily/daily-runner.ts:74` | The reverse diff uses the raw baseline, not the day-scoped one (fixed) |
 | 7 | Projects | `src/background/background.ts:454` | `startBindings` has no serialization and can undo its own updates (fixed) |
 | 8 | Config | `src/background/local-config.ts:150` | `mergeUiConfig` can wipe or resurrect manual bindings (fixed) |
@@ -64,6 +64,8 @@ The startup run, the watcher's `notifyOnCreate`, `taskUpdate` and the day-change
 **Scenario.** With `deleteRemoved` enabled, the user finishes the day in SP and tasks are archived. If `getTasks()` no longer returns them, their lines in today's note are stripped as "gone". The same applies to any partial or filtered result, since the only guard is a non-empty list.
 
 **Direction.** Confirm what `getTasks()` returns for archived tasks. Treat a task as gone only on positive evidence, for example a deletion hook.
+
+**Fixed.** The published API has `getArchivedTasks()`, and `getTasks()` does not return archived tasks. A line now counts as gone only when neither list holds its task. If the archive cannot be read, nothing is removed. Tested in `src/background/daily/__tests__/daily-runner.test.ts`.
 
 ## 6. Stale baseline used in the reverse diff
 

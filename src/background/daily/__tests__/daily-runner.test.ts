@@ -472,8 +472,37 @@ describe('runDailyNoteDryRun mirrors SP deletes and checkboxes into the note', (
     (global as any).PluginAPI = {
       getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: today }]),
       getTasks: jest.fn().mockResolvedValue(tasks),
+      getArchivedTasks: jest.fn().mockResolvedValue([]),
     };
   };
+
+  it('keeps a note line whose task is archived, even when deleteRemoved is on', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--old--> Archived\n');
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: ['p1'] }]),
+      getTasks: jest.fn().mockResolvedValue([{ id: 'p1', title: 'Project task', isDone: false, projectId: 'S3' }]),
+      getArchivedTasks: jest.fn().mockResolvedValue([{ id: 'old', title: 'Archived', isDone: true, projectId: 'S3' }]),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, deps, NOW);
+    expect(mockedWrite).toHaveBeenCalledWith(
+      '/vault/Daily/2026-10-21.md',
+      '## To Dos\n- [ ] <!--old--> Archived\n- [ ] <!--p1--> Project task\n',
+    );
+  });
+
+  it('keeps a note line when the archive cannot be read', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--gone--> Old\n');
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: ['p1'] }]),
+      getTasks: jest.fn().mockResolvedValue([{ id: 'p1', title: 'Project task', isDone: false, projectId: 'S3' }]),
+      getArchivedTasks: jest.fn().mockRejectedValue(new Error('archive unavailable')),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, deps, NOW);
+    expect(mockedWrite).toHaveBeenCalledWith(
+      '/vault/Daily/2026-10-21.md',
+      '## To Dos\n- [ ] <!--gone--> Old\n- [ ] <!--p1--> Project task\n',
+    );
+  });
 
   it('removes a note line whose SP task is gone when deleteRemoved is on (write mode)', async () => {
     mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--gone--> Old\n');

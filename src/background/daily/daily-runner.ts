@@ -35,6 +35,15 @@ export interface DailyRunDeps {
  * ## To Dos and checkboxes follow SP. Writes only happen when dryRun is false.
  * Tasks are never created or deleted from the note.
  */
+// IDs of archived SP tasks. Null when the archive cannot be read.
+const readArchivedIds = async (): Promise<Set<string> | null> => {
+  try {
+    return new Set((await PluginAPI.getArchivedTasks()).map((t) => t.id));
+  } catch {
+    return null;
+  }
+};
+
 // The startup run, the watcher, task hooks and the day check can all start a run.
 // Two overlapping runs would both create the SP task for the same typed line.
 const runQueue = createSerialQueue();
@@ -119,6 +128,13 @@ const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): P
       const parsed = parseNoteTaskLine(line);
       if (parsed && !liveIds.has(parsed.id)) goneIds.add(parsed.id);
     }
+  }
+  // getTasks() does not return archived tasks. A line counts as gone only when the archive
+  // does not hold its task either. If the archive cannot be read, nothing is removed.
+  if (goneIds.size > 0) {
+    const archivedIds = await readArchivedIds();
+    if (archivedIds === null) goneIds.clear();
+    else archivedIds.forEach((id) => goneIds.delete(id));
   }
   let goneRemoved = 0;
   if (goneIds.size > 0) {
