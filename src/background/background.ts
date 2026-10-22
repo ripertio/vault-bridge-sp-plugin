@@ -4,6 +4,7 @@ import {
   setConfigBridge,
   shutdownSyncRegistry,
   isStructuralTaskAction,
+  isTodayPlanningAction,
 } from './sync/sync-manager';
 import { loadLocalConfig, saveLocalConfig, mergeUiConfig } from './local-config';
 import type { LocalUserCfgV2, SyncBindingCfg } from './local-config';
@@ -1039,11 +1040,11 @@ const dailyDeps = () => ({
   );
 
   // A new task (`[Task] Add Task`) fires no taskUpdate, so it would only reach the note on
-  // the next check. The action hook sees it; only structural task actions schedule a run.
+  // the next check. The action hook sees it; structural task actions and Today planning actions schedule a run.
   PluginAPI.registerHook('action' as any, (...args: unknown[]) => {
     const raw = args[0] as { type?: string; action?: { type?: string } } | undefined;
     const type = raw?.type ?? raw?.action?.type;
-    if (typeof type === 'string' && isStructuralTaskAction(type)) {
+    if (typeof type === 'string' && (isStructuralTaskAction(type) || isTodayPlanningAction(type))) {
       scheduleDailyNoteRun(() => dailyCfg(), dailyDeps());
     }
   });

@@ -882,6 +882,17 @@ export const isStructuralTaskAction = (type: string): boolean =>
   STRUCTURAL_TASK_ACTION_NAMES.has(normalizeActionType(type));
 
 /**
+ * Actions that put a task on, or take it off, the Today list (drag to Today, plan for a
+ * day, schedule, add to the Today tag). They fire only the `action` hook, so the daily
+ * note would otherwise wait for the next poll. Matched by fragment because the exact
+ * names differ between SP versions; a spurious match only costs one debounced daily run.
+ */
+export const isTodayPlanningAction = (type: string): boolean => {
+  const name = normalizeActionType(type);
+  return /today|plantask|plantasks|scheduletask|dueday|planfor/.test(name);
+};
+
+/**
  * Project deletions (Bug #48 — ACTUAL root cause, console-verified 2026-09-16).
  *
  * Deleting a project in SP notifies the plugin through EXACTLY ONE channel: the

@@ -50,3 +50,16 @@ describe('isStructuralTaskAction', () => {
     expect(isStructuralTaskAction('[SP_ALL] Load(import) all data')).toBe(false);
   });
 });
+
+describe('isTodayPlanningAction', () => {
+  const { isTodayPlanningAction } = require('../../sync/sync-manager');
+  it('matches actions that move a task onto or off Today', () => {
+    expect(isTodayPlanningAction('[Task Shared] planTaskForDay')).toBe(true);
+    expect(isTodayPlanningAction('[Task Shared] addTasksToTodayTag')).toBe(true);
+    expect(isTodayPlanningAction('[Task Shared] removeTasksFromTodayTag')).toBe(true);
+  });
+  it('ignores unrelated actions', () => {
+    expect(isTodayPlanningAction('[Task] Update Task')).toBe(false);
+    expect(isTodayPlanningAction('[OperationLog] Bulk Apply Operations')).toBe(false);
+  });
+});
