@@ -92,27 +92,37 @@ const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): P
   // SP now holds the reverse updates. The steps below must see them, or the forward plan
   // would flip a checkbox the user just ticked back to SP's old state.
   const reverseById = new Map(reverse.map((c) => [c.taskId, c.updates]));
-  const tasks = fetchedTasks.map((t) => ({ ...t, ...reverseById.get(t.id) }));
-  const planned: DailyPlanTask[] = tasks
-    .filter((t) => plannedIds.has(t.id))
-    .map((t) => ({ id: t.id, title: t.title, isDone: t.isDone, projectId: t.projectId }));
+  const updatedTasks = fetchedTasks.map((t) => ({ ...t, ...reverseById.get(t.id) }));
 
   // 1a) Delete: only when the user opted in. The same batch op the original
   // sync uses (applyBatch + a delete op), grouped per SP project.
-  const removedIds = findRemovedBaselineIds(lines, baselineForToday);
+  // A note with no ID lines at all is more likely a half-written file (or a template
+  // that recreated it) than a user deleting every task, so nothing is removed then.
+  const noteHasIds = lines.some((l) => parseNoteTaskLine(l) !== null);
+  const removedIds = noteHasIds ? findRemovedBaselineIds(lines, baselineForToday) : [];
+  const deletedIds = new Set<string>();
   if (removedIds.length > 0) {
     log.log(`  - ${removedIds.length} task line(s) removed from the note`);
     if (cfg.deleteRemoved && !cfg.dryRun) {
       const byProject = new Map<string, string[]>();
       for (const id of removedIds) {
-        const projectId = tasks.find((t) => t.id === id)?.projectId ?? INBOX_PROJECT_ID;
+        // A task SP no longer has needs no delete; a batch naming it could be rejected.
+        const task = updatedTasks.find((t) => t.id === id);
+        if (!task) continue;
+        const projectId = task.projectId ?? INBOX_PROJECT_ID;
         byProject.set(projectId, [...(byProject.get(projectId) ?? []), id]);
       }
       for (const [projectId, ids] of byProject) {
         await applyBatch(projectId, ids.map((taskId) => ({ type: 'delete', taskId }) as any));
       }
+      removedIds.forEach((id) => deletedIds.add(id));
     }
   }
+  // Deleted tasks must not be planned, or the forward pass writes their lines back.
+  const tasks = updatedTasks.filter((t) => !deletedIds.has(t.id));
+  const planned: DailyPlanTask[] = tasks
+    .filter((t) => plannedIds.has(t.id))
+    .map((t) => ({ id: t.id, title: t.title, isDone: t.isDone, projectId: t.projectId }));
 
   // 1b) Create: task lines the user typed (no ID) become SP tasks in the Inbox.
   let working = [...lines];
@@ -251,19 +261,21 @@ const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): P
 
   // 3) Baseline = what the plugin now agrees with, for lines it owns.
   const next: DailyBaseline = { ...baselineForToday };
-  // Every ID on a note line is owned by the plugin, including tasks created from
-  // the note (they live in the Inbox, so they are not in `planned`). `tasks` already
-  // includes the reverse updates.
-  const byId = new Map<string, { id: string; title: string; isDone: boolean }>(
-    [...tasks, ...createdTasks].map((t) => [t.id, t]),
-  );
+  // Every ID on a note line of a known task is owned by the plugin, including tasks
+  // created from the note (they live in the Inbox, so they are not in `planned`).
+  const knownIds = new Set([...tasks, ...createdTasks].map((t) => t.id));
   for (const line of result.nextLines) {
     const parsed = parseNoteTaskLine(line);
-    const task = parsed && byId.get(parsed.id);
-    if (parsed && task) {
-      next[parsed.id] = { isDone: task.isDone, title: task.title };
+    // The baseline records the line as written, not SP's state. The forward pass does not
+    // rewrite titles (or checkboxes outside ## To Dos), so storing SP's values would make
+    // the next run read the unchanged line as a note edit and undo the SP-side change.
+    if (parsed && knownIds.has(parsed.id)) {
+      next[parsed.id] = { isDone: parsed.isDone, title: parsed.title };
     }
   }
+  // Lines whose SP task is gone were removed above; their IDs must not come back as
+  // "removed from the note" and be deleted in SP a second time.
+  if (cfg.deleteRemoved) goneIds.forEach((id) => delete next[id]);
   // A removed line is resolved once the user has answered: drop it from the
   // baseline either way, so the question is not asked again on every run.
   for (const id of removedIds) {

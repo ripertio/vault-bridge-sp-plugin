@@ -670,6 +670,7 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
     currentConfig = mergeUiConfig(currentConfig, incoming);
     persistConfig();
     if (bindingsChanged) {
+      activeBindingsJson = newBindingsJson;
       log.log('[sync-md] Config saved from UI — restarting sync registry');
       void startBindings();
     }
@@ -1018,7 +1019,8 @@ const dailyDeps = () => ({
         return { success: true, path: result.path, inboxFile: inboxFile ?? '' };
       }
       if (type === 'saveDailySettings') {
-        const result = validateDailySettings(message.daily ?? {});
+        // The panel does not send a vault path: the daily note uses the shared one.
+        const result = validateDailySettings({ ...message.daily, vaultPath: effectiveVaultPath(currentConfig) });
         if (!result.ok) return { success: false, error: result.error };
         currentConfig = { ...currentConfig, daily: result.cfg };
         persistConfig();

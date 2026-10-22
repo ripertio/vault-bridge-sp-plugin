@@ -278,7 +278,24 @@ describe('runDailyNoteDryRun', () => {
   });
 
   it('deletes via the shared batch op when deleteRemoved is on and writes are on', async () => {
-    mockedRead.mockResolvedValue('## To Dos\n');
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--i1--> Inbox task\n');
+    setSp([]);
+    const batch = jest.fn().mockResolvedValue({ success: true });
+    (global as any).PluginAPI = { ...(global as any).PluginAPI, batchUpdateForProject: batch };
+    const withBaseline = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Project task' }, i1: { isDone: false, title: 'Inbox task' } }),
+      getBaselineDay: () => '2026-10-21',
+      saveBaseline: jest.fn(),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, withBaseline, NOW);
+    expect(batch).toHaveBeenCalledWith({
+      projectId: 'S3',
+      operations: [{ type: 'delete', taskId: 'p1' }],
+    });
+  });
+
+  it('deletes nothing when the note has no task lines left (empty or half-written file)', async () => {
+    mockedRead.mockResolvedValue('');
     setSp([]);
     const batch = jest.fn().mockResolvedValue({ success: true });
     (global as any).PluginAPI = { ...(global as any).PluginAPI, batchUpdateForProject: batch };
@@ -288,10 +305,58 @@ describe('runDailyNoteDryRun', () => {
       saveBaseline: jest.fn(),
     };
     await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, withBaseline, NOW);
-    expect(batch).toHaveBeenCalledWith({
-      projectId: 'S3',
-      operations: [{ type: 'delete', taskId: 'p1' }],
-    });
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('does not write back the line of a task it just deleted', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--i1--> Inbox task\n');
+    setSp(['p1', 'i1']);
+    const batch = jest.fn().mockResolvedValue({ success: true });
+    (global as any).PluginAPI = { ...(global as any).PluginAPI, batchUpdateForProject: batch };
+    const saveBaseline = jest.fn();
+    const withBaseline = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Project task' }, i1: { isDone: false, title: 'Inbox task' } }),
+      getBaselineDay: () => '2026-10-21',
+      saveBaseline,
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, withBaseline, NOW);
+    expect(batch).toHaveBeenCalled();
+    expect(mockedWrite).not.toHaveBeenCalled();
+    expect(saveBaseline).toHaveBeenCalledWith({ i1: { isDone: false, title: 'Inbox task' } }, '2026-10-21');
+  });
+
+  it('does not send a delete for a removed line whose task SP no longer has', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--i1--> Inbox task\n');
+    setSp([]);
+    const batch = jest.fn().mockResolvedValue({ success: true });
+    (global as any).PluginAPI = { ...(global as any).PluginAPI, batchUpdateForProject: batch };
+    const withBaseline = {
+      getBaseline: () => ({ vanished: { isDone: false, title: 'Gone' }, i1: { isDone: false, title: 'Inbox task' } }),
+      getBaselineDay: () => '2026-10-21',
+      saveBaseline: jest.fn(),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, withBaseline, NOW);
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('records the note title in the baseline, so an SP rename is not undone', async () => {
+    // SP renamed p1 to "Renamed"; the note still shows the old title. A checkbox change
+    // makes the run save the baseline.
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--p1--> Old title\n');
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: ['p1'] }]),
+      getTasks: jest.fn().mockResolvedValue([{ id: 'p1', title: 'Renamed', isDone: true, projectId: 'S3' }]),
+      updateTask: jest.fn(),
+    };
+    const saveBaseline = jest.fn();
+    const withBaseline = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Old title' } }),
+      getBaselineDay: () => '2026-10-21',
+      saveBaseline,
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, withBaseline, NOW);
+    expect((global as any).PluginAPI.updateTask).not.toHaveBeenCalled();
+    expect(saveBaseline).toHaveBeenCalledWith({ p1: { isDone: true, title: 'Old title' } }, '2026-10-21');
   });
 
   it('does not delete in dry-run even when deleteRemoved is on', async () => {
@@ -530,6 +595,19 @@ describe('runDailyNoteDryRun mirrors SP deletes and checkboxes into the note', (
     await runDailyNoteDryRun({ ...cfg, dryRun: true, deleteRemoved: true }, deps, NOW);
     expect(mockedWrite).not.toHaveBeenCalled();
     expect(log.log).toHaveBeenCalledWith('  - 1 note line(s) whose SP task is gone (dry-run)');
+  });
+
+  it('drops a gone line from the baseline, so it is not deleted again next run', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--gone--> Old\n- [ ] <!--p1--> Project task\n');
+    setTasks([{ id: 'p1', title: 'Project task', isDone: false, projectId: 'S3' }], ['p1']);
+    const saveBaseline = jest.fn();
+    const withBaseline = {
+      getBaseline: () => ({ gone: { isDone: false, title: 'Old' }, p1: { isDone: false, title: 'Project task' } }),
+      getBaselineDay: () => '2026-10-21',
+      saveBaseline,
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, withBaseline, NOW);
+    expect(saveBaseline).toHaveBeenCalledWith({ p1: { isDone: false, title: 'Project task' } }, '2026-10-21');
   });
 
   it('removes nothing when the SP task list is empty (a failed read must not clear the note)', async () => {
