@@ -6,7 +6,7 @@ import {
   isStructuralTaskAction,
 } from './sync/sync-manager';
 import { loadLocalConfig, saveLocalConfig } from './local-config';
-import type { LocalUserCfgV2 } from './local-config';
+import type { LocalUserCfgV2, SyncBindingCfg } from './local-config';
 import { fetchLatestRelease, isNewerVersion } from './update-check';
 import type { UpdateInfo } from './update-check';
 import { log } from '../shared/logger';
@@ -42,6 +42,7 @@ import type { DeletedFolder } from './projects/folder-delete';
 import { showDeletedFolderDialog } from './projects/folder-delete-dialog';
 import { showCreateProjectDialog } from './projects/create-project-dialog';
 import { showRenameDialog, type RenameKind } from './projects/rename-dialog';
+import { showCreateFolderDialog } from './projects/create-folder-dialog';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
 declare const __PLUGIN_VERSION__: string;
@@ -339,6 +340,35 @@ const askAboutRename = (r: PendingRename, absDir: string): void => {
   });
 };
 
+// Projects without a folder already asked about this session, by project id.
+const askedProjectFolders = new Set<string>();
+
+// Ask in SP before creating the folder and task file for a project. Create writes them;
+// Ignore adds the project's name to the excluded list so it is not asked about again.
+const askAboutNewProjectFolder = (projectTitle: string, binding: SyncBindingCfg): void => {
+  if (askedProjectFolders.has(binding.projectId)) return;
+  askedProjectFolders.add(binding.projectId);
+  void showCreateFolderDialog(projectTitle, resolveProjectsDirCfg(currentConfig.projectsDir).taskFileName, {
+    onCreate: async () => {
+      try {
+        await assertRealPathInside(effectiveVaultPath(currentConfig), binding.filePath);
+        await spToMd(binding);
+        log.log(`created folder + task file for "${projectTitle}"`);
+        void startBindings();
+      } catch (err) {
+        log.error(`could not create folder for "${projectTitle}"`, err);
+      }
+    },
+    onIgnore: () => {
+      const dirCfg = resolveProjectsDirCfg(currentConfig.projectsDir);
+      currentConfig = { ...currentConfig, projectsDir: { ...dirCfg, excluded: ignoreRow(dirCfg.excluded, projectTitle) } };
+      persistConfig();
+      log.log(`ignoring project "${projectTitle}" for folder sync`);
+      void startBindings();
+    },
+  });
+};
+
 // Ask in SP what to do with a project whose linked folder was deleted. A dry-run only
 // logs. Unlink keeps the project and stops its folder from being created again.
 // Remove deletes the project (and its tasks) only after the user presses that button.
@@ -474,12 +504,9 @@ const startBindings = async (): Promise<void> => {
       ]);
       plan.foldersToCreate = plan.foldersToCreate.filter((p) => !held.has(p.id));
       plan.projectsToCreate = plan.projectsToCreate.filter((f) => !heldNames.has(f));
-      await runProjectsReconcile(plan, absDir, projectsDir.taskFileName, dailyCfg().dryRun, {
+      runProjectsReconcile(plan, absDir, projectsDir.taskFileName, dailyCfg().dryRun, {
         askCreateProject: askAboutNewFolder,
-        writeBacklog: async (binding) => {
-          await assertRealPathInside(vaultPath, binding.filePath);
-          await spToMd(binding);
-        },
+        askCreateFolder: askAboutNewProjectFolder,
       });
     } catch (err) {
       log.error('projects reconcile failed', err);

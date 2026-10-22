@@ -12,41 +12,39 @@ const plan = {
 
 const deps = () => ({
   askCreateProject: jest.fn(),
-  writeBacklog: jest.fn(async () => undefined),
+  askCreateFolder: jest.fn(),
 });
 
 describe('runProjectsReconcile', () => {
-  it('asks about a folder without a project and creates a folder + backlog for a project (write mode)', async () => {
+  it('asks about a folder without a project, and about a project without a folder', () => {
     const d = deps();
-    const n = await runProjectsReconcile(plan, '/vault/Projects', 'backlog.md', false, d);
+    runProjectsReconcile(plan, '/vault/Projects', 'backlog.md', false, d);
     expect(d.askCreateProject).toHaveBeenCalledWith('New folder');
-    expect(d.writeBacklog).toHaveBeenCalledWith({
+    expect(d.askCreateFolder).toHaveBeenCalledWith('Beta', {
       id: 'auto-p1',
       filePath: '/vault/Projects/Beta/backlog.md',
       projectId: 'p1',
       enabled: true,
       projectTitle: 'Beta',
     });
-    expect(n).toBe(1);
   });
 
-  it('uses the configured task file name for the new folder binding', async () => {
+  it('uses the configured task file name in the binding it offers', () => {
     const d = deps();
-    await runProjectsReconcile(plan, '/vault/Projects', 'tasks.md', false, d);
-    expect(d.writeBacklog).toHaveBeenCalledWith(expect.objectContaining({ filePath: '/vault/Projects/Beta/tasks.md' }));
+    runProjectsReconcile(plan, '/vault/Projects', 'tasks.md', false, d);
+    expect(d.askCreateFolder).toHaveBeenCalledWith('Beta', expect.objectContaining({ filePath: '/vault/Projects/Beta/tasks.md' }));
   });
 
-  it('changes nothing in dry-run and does not ask', async () => {
+  it('asks nothing in dry-run', () => {
     const d = deps();
-    const n = await runProjectsReconcile(plan, '/vault/Projects', 'backlog.md', true, d);
+    runProjectsReconcile(plan, '/vault/Projects', 'backlog.md', true, d);
     expect(d.askCreateProject).not.toHaveBeenCalled();
-    expect(d.writeBacklog).not.toHaveBeenCalled();
-    expect(n).toBe(0);
+    expect(d.askCreateFolder).not.toHaveBeenCalled();
   });
 
-  it('never removes anything (only ask and create-folder callbacks are used)', async () => {
+  it('only ever asks (never creates directly)', () => {
     const d = deps();
-    await runProjectsReconcile(plan, '/vault/Projects', 'backlog.md', false, d);
-    expect(Object.keys(d).sort()).toEqual(['askCreateProject', 'writeBacklog']);
+    runProjectsReconcile(plan, '/vault/Projects', 'backlog.md', false, d);
+    expect(Object.keys(d).sort()).toEqual(['askCreateFolder', 'askCreateProject']);
   });
 });

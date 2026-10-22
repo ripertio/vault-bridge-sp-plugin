@@ -6,24 +6,23 @@ export interface ReconcileDeps {
   // Ask the user in SP whether to create a project for a folder name. Nothing is
   // created here; the answer comes from the dialog's button.
   askCreateProject: (folder: string) => void;
-  // Write the project's tasks to its task file (creates the folder when needed).
-  writeBacklog: (binding: SyncBindingCfg) => Promise<void>;
+  // Ask the user in SP whether to create the folder and task file for a project.
+  // The binding says where the folder and task file go.
+  askCreateFolder: (projectTitle: string, binding: SyncBindingCfg) => void;
 }
 
 /**
  * Carry out the reconcile plan. Write mode only: in dry-run it logs the intent and
- * changes nothing. A failure on one item is logged and does not stop the others.
- * Returns the number of items created. Projects are never created here directly:
- * folders without a project are handed to `askCreateProject`.
+ * changes nothing. Nothing is created here directly: both directions are handed to
+ * the ask callbacks, and the user's answer in SP does the create.
  */
-export const runProjectsReconcile = async (
+export const runProjectsReconcile = (
   plan: ReconcilePlan,
   projectsDirAbs: string,
   taskFileName: string,
   dryRun: boolean,
   deps: ReconcileDeps,
-): Promise<number> => {
-  let created = 0;
+): void => {
   for (const folder of plan.projectsToCreate) {
     if (dryRun) {
       log.log(`would ask whether to create SP project "${folder}"`);
@@ -41,16 +40,9 @@ export const runProjectsReconcile = async (
       projectTitle: project.title,
     };
     if (dryRun) {
-      log.log(`would create folder + ${taskFileName} for "${project.title}"`);
+      log.log(`would ask whether to create folder + ${taskFileName} for "${project.title}"`);
       continue;
     }
-    try {
-      await deps.writeBacklog(binding);
-      log.log(`created folder + ${taskFileName} for "${project.title}"`);
-      created++;
-    } catch (err) {
-      log.error(`could not create ${taskFileName} for "${project.title}"`, err);
-    }
+    deps.askCreateFolder(project.title, binding);
   }
-  return created;
 };
