@@ -11,7 +11,16 @@ interface NodeScriptResult {
 const toErrMsg = (err: string | PluginNodeScriptError | undefined): string | undefined =>
   err === undefined ? undefined : typeof err === 'string' ? err : err.message;
 
-export const startFileWatcher = (filePath: string, onChange: () => void): (() => void) => {
+export interface FileWatchOptions {
+  // Also report a file that appears after it was missing when the watch started.
+  notifyOnCreate?: boolean;
+}
+
+export const startFileWatcher = (
+  filePath: string,
+  onChange: () => void,
+  options: FileWatchOptions = {},
+): (() => void) => {
   // NOTE: no `if (!PluginAPI.executeNodeScript)` guard — SP binds it
   // unconditionally (off-desktop it resolves to { success: false }, which
   // getFileMtime turns into a caught error → the watcher simply reports no
@@ -43,6 +52,7 @@ export const startFileWatcher = (filePath: string, onChange: () => void): (() =>
         onChange();
       } else if (!lastMtime && currentMtime) {
         lastMtime = currentMtime;
+        if (options.notifyOnCreate) onChange();
       }
     } catch (error) {
       lastMtime = null;

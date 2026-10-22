@@ -602,7 +602,9 @@ const dailyDeps = () => ({
   }
 
   // Daily notes: dry-run only, and only when the user has enabled it.
-  startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), startFileWatcher);
+  startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), (path, onChange) =>
+    startFileWatcher(path, onChange, { notifyOnCreate: true }),
+  );
   void runDailyNoteDryRun(dailyCfg(), dailyDeps()).catch((err) =>
     log.error('daily dry-run failed', err),
   );
@@ -739,7 +741,9 @@ const dailyDeps = () => ({
         currentConfig = { ...currentConfig, daily: result.cfg };
         persistConfig();
         // Restart the watcher so it follows the new folder or filename format.
-        startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), startFileWatcher);
+        startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), (path, onChange) =>
+          startFileWatcher(path, onChange, { notifyOnCreate: true }),
+        );
         return { success: true, daily: result.cfg };
       }
       if (type === 'getProjects') {

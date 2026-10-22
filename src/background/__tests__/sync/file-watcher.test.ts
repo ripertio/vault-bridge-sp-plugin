@@ -120,6 +120,37 @@ describe('File Watcher', () => {
       expect(mockCallback).toHaveBeenCalledTimes(1);
     });
 
+    it('should not trigger callback when a missing file appears, by default', async () => {
+      mockExecuteNodeScript.mockResolvedValueOnce({ success: true, result: { success: true, mtime: null } });
+      stopWatcher = startFileWatcher(mockFilePath, mockCallback);
+      await jest.advanceTimersToNextTimerAsync();
+
+      mockExecuteNodeScript.mockResolvedValueOnce({
+        success: true,
+        result: { success: true, mtime: new Date('2024-01-01T00:00:00Z').toISOString() },
+      });
+      await jest.advanceTimersByTimeAsync(2000);
+
+      expect(mockCallback).not.toHaveBeenCalled();
+    });
+
+    it('should trigger callback when a missing file appears with notifyOnCreate', async () => {
+      mockExecuteNodeScript.mockResolvedValueOnce({ success: true, result: { success: true, mtime: null } });
+      stopWatcher = startFileWatcher(mockFilePath, mockCallback, { notifyOnCreate: true });
+      await jest.advanceTimersToNextTimerAsync();
+
+      mockExecuteNodeScript.mockResolvedValueOnce({
+        success: true,
+        result: { success: true, mtime: new Date('2024-01-01T00:00:00Z').toISOString() },
+      });
+      await jest.advanceTimersByTimeAsync(2000);
+      expect(mockCallback).toHaveBeenCalledTimes(1);
+
+      // Later polls with the same mtime do not fire again.
+      await jest.advanceTimersByTimeAsync(2000);
+      expect(mockCallback).toHaveBeenCalledTimes(1);
+    });
+
     it('should not trigger callback when mtime is unchanged', async () => {
       const sameMtime = new Date('2024-01-01T00:00:00Z');
 
