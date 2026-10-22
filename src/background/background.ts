@@ -35,6 +35,7 @@ import { findDeletedFolders, findRemovedProjectFolders } from './projects/folder
 import type { DeletedFolder } from './projects/folder-delete';
 import { showDeletedFolderDialog } from './projects/folder-delete-dialog';
 import { showCreateProjectDialog } from './projects/create-project-dialog';
+import { showRenameDialog, type RenameKind } from './projects/rename-dialog';
 
 // Current plugin version, injected from manifest.json at build time (see build.js).
 declare const __PLUGIN_VERSION__: string;
@@ -276,6 +277,39 @@ const askAboutNewFolder = (folder: string): void => {
   });
 };
 
+interface PendingRename {
+  kind: RenameKind;
+  projectId: string;
+  from: string;
+  to: string;
+}
+
+// Renames already asked about this session. Cleared on restart, so "Keep for now" comes back then.
+const askedRenames = new Set<string>();
+
+// Ask in SP before a rename. Rename applies it on both sides and records the new name
+// as the link; nothing is renamed without that button.
+const askAboutRename = (r: PendingRename, absDir: string): void => {
+  const key = `${r.kind}:${r.projectId}:${r.from}>${r.to}`;
+  if (askedRenames.has(key)) return;
+  askedRenames.add(key);
+  void showRenameDialog(r.kind, r.from, r.to, async () => {
+    try {
+      if (r.kind === 'folder') await renameSubfolder(absDir, r.from, r.to);
+      else await PluginAPI.updateProject(r.projectId, { title: r.to });
+      currentConfig = {
+        ...currentConfig,
+        _projectLinks: { ...(currentConfig._projectLinks ?? {}), [r.projectId]: r.to },
+      };
+      persistConfig();
+      log.log(`renamed ${r.kind === 'folder' ? 'folder' : 'SP project'} "${r.from}" → "${r.to}"`);
+      void startBindings();
+    } catch (err) {
+      log.error(`could not rename "${r.from}" to "${r.to}"`, err);
+    }
+  });
+};
+
 // Ask in SP what to do with a project whose linked folder was deleted. A dry-run only
 // logs. Unlink keeps the project and stops its folder from being created again.
 // Remove deletes the project (and its tasks) only after the user presses that button.
@@ -333,21 +367,25 @@ const startBindings = async (): Promise<void> => {
       const previousFolders = currentConfig._knownFolders ?? null;
 
       // Renames first, so the reconcile below sees the already-renamed folders.
+      // Renames are never applied here. Each one is shown in SP and applied only when the
+      // user approves it. Until then its project and names are held for this run, so
+      // nothing is created, deleted or re-linked because of it.
       const renames = planRenames(links, folders, projects, previousFolders);
-      for (const r of renames.renameFolders) {
-        log.log(`rename folder "${r.from}" → "${r.to}"${writeMode ? '' : ' (dry-run)'}`);
-        if (writeMode) await renameSubfolder(absDir, r.from, r.to);
+      const pending: PendingRename[] = [
+        ...renames.renameFolders.map((r) => ({ kind: 'folder' as const, ...r })),
+        ...renames.renameProjects.map((r) => ({ kind: 'project' as const, ...r })),
+      ];
+      for (const r of pending) {
+        log.log(`rename ${r.kind === 'folder' ? 'folder' : 'SP project'} "${r.from}" → "${r.to}"${writeMode ? '' : ' (dry-run)'}`);
+        if (writeMode) askAboutRename(r, absDir);
       }
-      for (const r of renames.renameProjects) {
-        log.log(`rename SP project "${r.from}" → "${r.to}"${writeMode ? '' : ' (dry-run)'}`);
-        if (writeMode) await PluginAPI.updateProject(r.projectId, { title: r.to });
-      }
-      const renamedFolders = writeMode
-        ? folders.map((f) => renames.renameFolders.find((r) => r.from === f)?.to ?? f)
-        : folders;
-      const renamedProjects = writeMode
-        ? projects.map((p) => ({ ...p, title: renames.renameProjects.find((r) => r.projectId === p.id)?.to ?? p.title }))
-        : projects;
+      const heldIds = new Set(pending.map((r) => r.projectId));
+      const heldNames = new Set(pending.flatMap((r) => [r.from, r.to]));
+      // A project renamed in the vault: its new folder name is not known to the plugin yet.
+      const newFolderNames = new Set(renames.renameProjects.map((r) => r.to));
+      const renamedFolders = folders;
+      const knownFolders = folders.filter((f) => !newFolderNames.has(f));
+      const renamedProjects = projects;
 
       // Opt-in: a project removed in SP adds its folder name to the excluded list, so the
       // folder is not offered for a new project. Checked before matching, and skipped if
@@ -367,9 +405,8 @@ const startBindings = async (): Promise<void> => {
       // Opt-in: a linked folder that vanished is a question for the user, not a reason to
       // recreate it. Checked against the folders before this run's renames.
       const projectIds = new Set(projects.map((p) => p.id));
-      const renamedIds = new Set(renames.renameProjects.map((r) => r.projectId));
       const deleted = projectsDir.confirmFolderDelete
-        ? findDeletedFolders(links, folders, projectIds, renamedIds)
+        ? findDeletedFolders(links, folders, projectIds, heldIds)
         : [];
       for (const d of deleted) {
         askAboutDeletedFolder(d, projects.find((p) => p.id === d.projectId)?.title ?? d.folder, writeMode);
@@ -381,6 +418,8 @@ const startBindings = async (): Promise<void> => {
         for (const m of match.matched) nextLinks[m.projectId] = m.folder;
         // A deleted folder keeps its link until the user answers the question.
         for (const d of deleted) nextLinks[d.projectId] = d.folder;
+        // A pending rename keeps its old link until the user approves it.
+        for (const id of heldIds) nextLinks[id] = links[id];
         const matchedIds = new Set(match.matched.map((m) => m.projectId));
         const unlinked = (currentConfig._unlinkedProjectIds ?? []).filter(
           (id) => projectIds.has(id) && !matchedIds.has(id),
@@ -389,14 +428,19 @@ const startBindings = async (): Promise<void> => {
           ...currentConfig,
           _projectLinks: nextLinks,
           _unlinkedProjectIds: unlinked,
-          _knownFolders: renamedFolders,
+          _knownFolders: knownFolders,
         };
         persistConfig();
       }
       // Projects still waiting on the deleted-folder question, or unlinked, get no folder.
       const plan = planReconcile(match);
-      const held = new Set([...deleted.map((d) => d.projectId), ...(currentConfig._unlinkedProjectIds ?? [])]);
+      const held = new Set([
+        ...deleted.map((d) => d.projectId),
+        ...(currentConfig._unlinkedProjectIds ?? []),
+        ...heldIds,
+      ]);
       plan.foldersToCreate = plan.foldersToCreate.filter((p) => !held.has(p.id));
+      plan.projectsToCreate = plan.projectsToCreate.filter((f) => !heldNames.has(f));
       await runProjectsReconcile(plan, absDir, projectsDir.taskFileName, dailyCfg().dryRun, {
         askCreateProject: askAboutNewFolder,
         writeBacklog: async (binding) => {
