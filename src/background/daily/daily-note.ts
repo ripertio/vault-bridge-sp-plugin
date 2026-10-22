@@ -18,6 +18,9 @@ export interface DailyNoteCfg {
   // Delete the SP task when its plugin-written line is removed from the note.
   // Off by default; deletes only run in write mode.
   deleteRemoved: boolean;
+  // Once per day, carry unfinished tasks from the last earlier note into today's
+  // ## To Dos. Off by default; in dry-run it only logs what would be carried.
+  rolloverOverdue: boolean;
 }
 
 export const DEFAULT_DAILY_NOTE_CFG: DailyNoteCfg = {
@@ -28,6 +31,7 @@ export const DEFAULT_DAILY_NOTE_CFG: DailyNoteCfg = {
   includeInbox: true,
   vaultPath: '',
   deleteRemoved: false,
+  rolloverOverdue: false,
 };
 
 // SP's virtual "Today" tag ID. Observed in the SP 19.2.0 bundle; not yet

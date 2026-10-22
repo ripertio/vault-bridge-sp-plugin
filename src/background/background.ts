@@ -5,7 +5,14 @@ import { fetchLatestRelease, isNewerVersion } from './update-check';
 import type { UpdateInfo } from './update-check';
 import { log } from '../shared/logger';
 import { runDailyNoteDryRun } from './daily/daily-runner';
-import { scheduleDailyNoteRun, cancelDailyNoteRun, startDailyNoteWatcher, stopDailyNoteWatcher } from './daily/daily-scheduler';
+import {
+  scheduleDailyNoteRun,
+  cancelDailyNoteRun,
+  startDailyNoteWatcher,
+  stopDailyNoteWatcher,
+  startDayChangeCheck,
+  stopDayChangeCheck,
+} from './daily/daily-scheduler';
 import { startFileWatcher } from './sync/file-watcher';
 import { resolveDailyNoteCfg } from './daily/daily-note';
 import { validateDailySettings } from './daily/daily-settings';
@@ -416,6 +423,8 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
       daily: currentConfig.daily,
       projectsDir: currentConfig.projectsDir,
       _dailyBaseline: currentConfig._dailyBaseline,
+      _dailyBaselineDay: currentConfig._dailyBaselineDay,
+      _dailyRolloverDay: currentConfig._dailyRolloverDay,
     };
     persistConfig();
     if (bindingsChanged) {
@@ -434,11 +443,20 @@ const dailyCfg = () => ({
   vaultPath: effectiveVaultPath(currentConfig),
 });
 
+const watchDailyNote = (path: string, onChange: () => void) =>
+  startFileWatcher(path, onChange, { notifyOnCreate: true });
+
 // Baseline storage for the daily-note sync (device-local, saved with the config).
 const dailyDeps = () => ({
   getBaseline: () => currentConfig._dailyBaseline ?? {},
-  saveBaseline: (baseline: NonNullable<LocalUserCfgV2['_dailyBaseline']>) => {
-    currentConfig = { ...currentConfig, _dailyBaseline: baseline };
+  getBaselineDay: () => currentConfig._dailyBaselineDay,
+  getRolloverDay: () => currentConfig._dailyRolloverDay,
+  saveRolloverDay: (day: string) => {
+    currentConfig = { ...currentConfig, _dailyRolloverDay: day };
+    persistConfig();
+  },
+  saveBaseline: (baseline: NonNullable<LocalUserCfgV2['_dailyBaseline']>, day: string) => {
+    currentConfig = { ...currentConfig, _dailyBaseline: baseline, _dailyBaselineDay: day };
     persistConfig();
   },
 });
@@ -602,12 +620,17 @@ const dailyDeps = () => ({
   }
 
   // Daily notes: dry-run only, and only when the user has enabled it.
-  startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), (path, onChange) =>
-    startFileWatcher(path, onChange, { notifyOnCreate: true }),
-  );
+  startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), watchDailyNote);
   void runDailyNoteDryRun(dailyCfg(), dailyDeps()).catch((err) =>
     log.error('daily dry-run failed', err),
   );
+  // At midnight the note path changes: follow the new day's note.
+  startDayChangeCheck(() => {
+    startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), watchDailyNote);
+    void runDailyNoteDryRun(dailyCfg(), dailyDeps()).catch((err) =>
+      log.error('daily dry-run failed', err),
+    );
+  });
 
   migrateBindingsOnce();
   activeBindingsJson = JSON.stringify(currentConfig?.bindings ?? []);
@@ -741,9 +764,7 @@ const dailyDeps = () => ({
         currentConfig = { ...currentConfig, daily: result.cfg };
         persistConfig();
         // Restart the watcher so it follows the new folder or filename format.
-        startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), (path, onChange) =>
-          startFileWatcher(path, onChange, { notifyOnCreate: true }),
-        );
+        startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), watchDailyNote);
         return { success: true, daily: result.cfg };
       }
       if (type === 'getProjects') {
@@ -787,6 +808,7 @@ const dailyDeps = () => ({
       if (projectsSyncTimer) clearTimeout(projectsSyncTimer);
       stopFolderPoll?.();
       stopDailyNoteWatcher();
+      stopDayChangeCheck();
       shutdownSyncRegistry();
       log.log('[sync-md-multi] onUnload: timers + sessions torn down');
     });

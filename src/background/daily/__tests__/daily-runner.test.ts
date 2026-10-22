@@ -12,7 +12,7 @@ const mockedWrite = writeTasksFile as jest.MockedFunction<typeof writeTasksFile>
 const { log } = jest.requireMock('../../../shared/logger') as { log: { log: jest.Mock; error: jest.Mock } };
 
 const NOW = new Date(2026, 9, 21);
-const deps = { getBaseline: () => ({}), saveBaseline: jest.fn() };
+const deps = { getBaseline: () => ({}), saveBaseline: jest.fn(), getBaselineDay: () => '2026-10-21' };
 const ROOT = '/vault';
 const cfg = { ...DEFAULT_DAILY_NOTE_CFG, enabled: true, vaultPath: ROOT };
 
@@ -137,6 +137,7 @@ describe('runDailyNoteDryRun', () => {
     };
     const withBaseline = {
       getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      getBaselineDay: () => '2026-10-21',
       saveBaseline: jest.fn(),
     };
     await runDailyNoteDryRun({ ...cfg, dryRun: false }, withBaseline, NOW);
@@ -155,6 +156,7 @@ describe('runDailyNoteDryRun', () => {
     };
     const withBaseline = {
       getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      getBaselineDay: () => '2026-10-21',
       saveBaseline: jest.fn(),
     };
     await runDailyNoteDryRun({ ...cfg, dryRun: true }, withBaseline, NOW);
@@ -167,7 +169,7 @@ describe('runDailyNoteDryRun', () => {
     const saveBaseline = jest.fn();
     await runDailyNoteDryRun({ ...cfg, dryRun: false }, { getBaseline: () => ({}), saveBaseline }, NOW);
     expect(mockedWrite).toHaveBeenCalled();
-    expect(saveBaseline).toHaveBeenCalledWith({ p1: { isDone: false, title: 'Project task' } });
+    expect(saveBaseline).toHaveBeenCalledWith({ p1: { isDone: false, title: 'Project task' } }, '2026-10-21');
   });
 
   it('does not save a baseline in dry-run', async () => {
@@ -211,6 +213,7 @@ describe('runDailyNoteDryRun', () => {
     (global as any).PluginAPI = { ...(global as any).PluginAPI, batchUpdateForProject: batch };
     const withBaseline = {
       getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      getBaselineDay: () => '2026-10-21',
       saveBaseline: jest.fn(),
     };
     await runDailyNoteDryRun({ ...cfg, dryRun: false }, withBaseline, NOW);
@@ -224,6 +227,7 @@ describe('runDailyNoteDryRun', () => {
     (global as any).PluginAPI = { ...(global as any).PluginAPI, batchUpdateForProject: batch };
     const withBaseline = {
       getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      getBaselineDay: () => '2026-10-21',
       saveBaseline: jest.fn(),
     };
     await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, withBaseline, NOW);
@@ -240,6 +244,7 @@ describe('runDailyNoteDryRun', () => {
     (global as any).PluginAPI = { ...(global as any).PluginAPI, batchUpdateForProject: batch };
     const withBaseline = {
       getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      getBaselineDay: () => '2026-10-21',
       saveBaseline: jest.fn(),
     };
     await runDailyNoteDryRun({ ...cfg, dryRun: true, deleteRemoved: true }, withBaseline, NOW);
@@ -273,5 +278,117 @@ describe('runDailyNoteDryRun', () => {
       runDailyNoteDryRun({ ...cfg, folder: '../outside' }, deps, NOW),
     ).rejects.toThrow();
     expect(mockedRead).not.toHaveBeenCalled();
+  });
+});
+
+describe('runDailyNoteDryRun baseline day', () => {
+  it('never deletes tasks from yesterday that are missing from the new day note', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n');
+    setSp([]);
+    const batch = jest.fn().mockResolvedValue({ success: true });
+    (global as any).PluginAPI = { ...(global as any).PluginAPI, batchUpdateForProject: batch };
+    const yesterday = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      getBaselineDay: () => '2026-10-20',
+      saveBaseline: jest.fn(),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false, deleteRemoved: true }, yesterday, NOW);
+    expect(batch).not.toHaveBeenCalled();
+  });
+
+  it('forgets yesterday baseline entries once it writes the new day note', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n');
+    setSp(['i1']);
+    const yesterday = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      getBaselineDay: () => '2026-10-20',
+      saveBaseline: jest.fn(),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, yesterday, NOW);
+    const saved = yesterday.saveBaseline.mock.calls[0][0];
+    expect(saved).not.toHaveProperty('p1');
+    expect(yesterday.saveBaseline.mock.calls[0][1]).toBe('2026-10-21');
+  });
+});
+
+describe('runDailyNoteDryRun rollover', () => {
+  const YESTERDAY_NOTE = '## To Dos\n- [ ] <!--p1--> Project task\n- [x] <!--i1--> Inbox task\n';
+  const mockNotes = (notes: Record<string, string>) =>
+    mockedRead.mockImplementation(async (path: string) => {
+      const name = path.split('/').pop() ?? '';
+      return name in notes ? notes[name] : null;
+    });
+  const rollCfg = { ...cfg, rolloverOverdue: true, dryRun: false };
+  const rollDeps = (extra: object = {}) => ({
+    getBaseline: () => ({}),
+    saveBaseline: jest.fn(),
+    getBaselineDay: () => '2026-10-21',
+    getRolloverDay: () => undefined,
+    saveRolloverDay: jest.fn(),
+    ...extra,
+  });
+
+  it('does nothing when rolloverOverdue is off (the default)', async () => {
+    mockNotes({ '2026-10-21.md': '## To Dos\n', '2026-10-20.md': YESTERDAY_NOTE });
+    setSp([]);
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, rollDeps(), NOW);
+    expect(mockedWrite).not.toHaveBeenCalled();
+  });
+
+  it('carries unfinished tasks from yesterday into today and records the day', async () => {
+    mockNotes({ '2026-10-21.md': '## To Dos\n', '2026-10-20.md': YESTERDAY_NOTE });
+    setSp([]);
+    const deps = rollDeps();
+    await runDailyNoteDryRun(rollCfg, deps, NOW);
+    expect(mockedWrite).toHaveBeenCalledWith(
+      '/vault/Daily/2026-10-21.md',
+      '## To Dos\n- [ ] <!--p1--> Project task\n',
+    );
+    expect(deps.saveRolloverDay).toHaveBeenCalledWith('2026-10-21');
+  });
+
+  it('logs but does not write or record the day in dry-run', async () => {
+    mockNotes({ '2026-10-21.md': '## To Dos\n', '2026-10-20.md': YESTERDAY_NOTE });
+    setSp([]);
+    const deps = rollDeps();
+    await runDailyNoteDryRun({ ...rollCfg, dryRun: true }, deps, NOW);
+    expect(log.log).toHaveBeenCalledWith('  ↻ rollover "Project task" from 2026-10-20 (dry-run)');
+    expect(mockedWrite).not.toHaveBeenCalled();
+    expect(deps.saveRolloverDay).not.toHaveBeenCalled();
+  });
+
+  it('runs at most once per day', async () => {
+    mockNotes({ '2026-10-21.md': '## To Dos\n', '2026-10-20.md': YESTERDAY_NOTE });
+    setSp([]);
+    await runDailyNoteDryRun(rollCfg, rollDeps({ getRolloverDay: () => '2026-10-21' }), NOW);
+    expect(mockedWrite).not.toHaveBeenCalled();
+  });
+
+  it('skips tasks that are done in SP', async () => {
+    mockNotes({ '2026-10-21.md': '## To Dos\n', '2026-10-20.md': YESTERDAY_NOTE });
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: [] }]),
+      getTasks: jest.fn().mockResolvedValue([{ id: 'p1', title: 'Project task', isDone: true, projectId: 'S3' }]),
+    };
+    await runDailyNoteDryRun(rollCfg, rollDeps(), NOW);
+    expect(mockedWrite).not.toHaveBeenCalled();
+  });
+
+  it('does not re-add a task that is already in today note', async () => {
+    mockNotes({
+      '2026-10-21.md': '## To Dos\n- [ ] <!--p1--> Project task\n',
+      '2026-10-20.md': YESTERDAY_NOTE,
+    });
+    setSp([]);
+    await runDailyNoteDryRun(rollCfg, rollDeps(), NOW);
+    expect(mockedWrite).not.toHaveBeenCalled();
+  });
+
+  it('looks back past a missing day to the last note that exists', async () => {
+    mockNotes({ '2026-10-21.md': '## To Dos\n', '2026-10-19.md': YESTERDAY_NOTE });
+    setSp([]);
+    await runDailyNoteDryRun(rollCfg, rollDeps(), NOW);
+    expect(log.log).toHaveBeenCalledWith('  ↻ rollover "Project task" from 2026-10-19');
+    expect(mockedWrite).toHaveBeenCalled();
   });
 });

@@ -4,6 +4,9 @@ import {
   DAILY_NOTE_DEBOUNCE_MS,
   startDailyNoteWatcher,
   stopDailyNoteWatcher,
+  startDayChangeCheck,
+  stopDayChangeCheck,
+  DAY_CHECK_INTERVAL_MS,
 } from '../daily-scheduler';
 import { runDailyNoteDryRun } from '../daily-runner';
 import { DEFAULT_DAILY_NOTE_CFG } from '../daily-note';
@@ -90,5 +93,36 @@ describe('daily-note watcher', () => {
     startDailyNoteWatcher(() => cfg, deps2, () => stop);
     stopDailyNoteWatcher();
     expect(stop).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('startDayChangeCheck', () => {
+  afterEach(() => stopDayChangeCheck());
+
+  it('calls back once when the local date changes', () => {
+    jest.setSystemTime(new Date(2026, 9, 21, 12, 0, 0));
+    const onDayChange = jest.fn();
+    startDayChangeCheck(onDayChange);
+
+    jest.advanceTimersByTime(DAY_CHECK_INTERVAL_MS);
+    expect(onDayChange).not.toHaveBeenCalled();
+
+    jest.setSystemTime(new Date(2026, 9, 22, 0, 0, 30));
+    jest.advanceTimersByTime(DAY_CHECK_INTERVAL_MS);
+    expect(onDayChange).toHaveBeenCalledTimes(1);
+
+    jest.advanceTimersByTime(DAY_CHECK_INTERVAL_MS);
+    expect(onDayChange).toHaveBeenCalledTimes(1);
+  });
+
+  it('stops checking after stopDayChangeCheck', () => {
+    jest.setSystemTime(new Date(2026, 9, 21, 12, 0, 0));
+    const onDayChange = jest.fn();
+    startDayChangeCheck(onDayChange);
+    stopDayChangeCheck();
+
+    jest.setSystemTime(new Date(2026, 9, 22, 0, 0, 30));
+    jest.advanceTimersByTime(DAY_CHECK_INTERVAL_MS * 2);
+    expect(onDayChange).not.toHaveBeenCalled();
   });
 });

@@ -13,11 +13,17 @@ import { DailyBaseline, diffNoteAgainstBaseline, findRemovedBaselineIds, parseNo
 import { applyBatch } from '../sync/md-to-sp';
 import { findNewTaskLines, stampNewTaskLine } from './daily-create';
 import { findToDosSection } from './daily-note';
+import { findOverdueIds, insertIntoSection, readPreviousNote } from './daily-rollover';
 
 export interface DailyRunDeps {
-  // Persist the baseline after a successful write (device-local config).
-  saveBaseline: (baseline: DailyBaseline) => void;
+  // Persist the baseline and the day of the note it was written for (device-local config).
+  saveBaseline: (baseline: DailyBaseline, day: string) => void;
   getBaseline: () => DailyBaseline;
+  // Day the stored baseline belongs to. Missing means unknown, so it is not trusted for removals.
+  getBaselineDay?: () => string | undefined;
+  // Day whose overdue tasks were already rolled over (once per day, device-local).
+  getRolloverDay?: () => string | undefined;
+  saveRolloverDay?: (day: string) => void;
 }
 
 /**
@@ -59,6 +65,10 @@ export const runDailyNoteDryRun = async (
 
   // 1) Reverse: note edits → SP (only the plugin's own baseline IDs).
   const baseline = deps.getBaseline();
+  const today = isoDay(now);
+  // The baseline lists IDs from the note of the day it was saved on. On a new day
+  // those IDs are not missing from today's note, they were never in it.
+  const baselineForToday = deps.getBaselineDay?.() === today ? baseline : {};
   const reverse = diffNoteAgainstBaseline(lines, baseline, spIsDone);
   log.log(`daily ${cfg.dryRun ? 'dry-run' : 'sync'} ${notePath}`);
   reverse.forEach((c) => log.log(`  ← note ${c.taskId} ${JSON.stringify(c.updates)}`));
@@ -70,7 +80,7 @@ export const runDailyNoteDryRun = async (
 
   // 1a) Delete: only when the user opted in. The same batch op the original
   // sync uses (applyBatch + a delete op), grouped per SP project.
-  const removedIds = findRemovedBaselineIds(lines, baseline);
+  const removedIds = findRemovedBaselineIds(lines, baselineForToday);
   if (removedIds.length > 0) {
     log.log(`  - ${removedIds.length} task line(s) removed from the note`);
     if (cfg.deleteRemoved && !cfg.dryRun) {
@@ -108,13 +118,42 @@ export const runDailyNoteDryRun = async (
     }
   }
 
+  // 1c) Rollover (opt-in, once per day): unfinished tasks from the last earlier note
+  // are carried into today's ## To Dos. The lines go in before the forward plan, so
+  // the plan sees them as present and does not add them twice.
+  const rolloverDue = cfg.rolloverOverdue && deps.getRolloverDay?.() !== today;
+  let carriedCount = 0;
+  if (rolloverDue && section) {
+    const previous = await readPreviousNote(cfg, now, readTasksFile);
+    if (previous) {
+      const overdueIds = findOverdueIds(previous.lines, spIsDone);
+      const body = working.slice(section.bodyStart, section.bodyEnd).join('\n');
+      const carried = tasks.filter((t) => overdueIds.has(t.id) && !body.includes(`<!--${t.id}-->`));
+      for (const t of carried) {
+        log.log(`  ↻ rollover "${t.title}" from ${isoDay(previous.day)}${cfg.dryRun ? ' (dry-run)' : ''}`);
+      }
+      if (!cfg.dryRun && carried.length > 0) {
+        working = insertIntoSection(
+          working,
+          section,
+          carried.map((t) => `- [ ] <!--${t.id}--> ${t.title}`),
+        );
+      }
+      carriedCount = carried.length;
+    }
+  }
+
   // 2) Forward: SP → note. In write mode, created tasks are not yet in the Today
   // tag, so they are not planned here; they are stamped with their ID above.
   const result = planDailyNote(cfg, working, planned);
   result.logLines.forEach((line) => log.log(line));
 
-  const changes = result.missingTaskIds.length + result.statusChangedTaskIds.length + created.length;
-  if (cfg.dryRun || changes === 0) return;
+  const changes = result.missingTaskIds.length + result.statusChangedTaskIds.length + created.length + carriedCount;
+  if (cfg.dryRun) return;
+  if (changes === 0) {
+    if (rolloverDue) deps.saveRolloverDay?.(today);
+    return;
+  }
 
   // Re-read right before writing: if the user edited the note since the plan was
   // computed, skip this write rather than overwrite their change.
@@ -124,11 +163,13 @@ export const runDailyNoteDryRun = async (
     return;
   }
   await writeTasksFile(notePath, result.nextLines.join('\n'));
+  if (rolloverDue) deps.saveRolloverDay?.(today);
+  if (carriedCount > 0) log.log(`rolled over ${carriedCount} overdue task(s)`);
   if (created.length > 0) log.log(`created ${created.length} SP task(s) from the note`);
   log.log(`daily note updated: +${result.missingTaskIds.length} task(s), ~${result.statusChangedTaskIds.length} checkbox(es)`);
 
   // 3) Baseline = what the plugin now agrees with, for lines it owns.
-  const next: DailyBaseline = { ...baseline };
+  const next: DailyBaseline = { ...baselineForToday };
   // Every ID on a note line is owned by the plugin, including tasks created from
   // the note (they live in the Inbox, so they are not in `planned`).
   const byId = new Map<string, { id: string; title: string; isDone: boolean }>(
@@ -146,5 +187,5 @@ export const runDailyNoteDryRun = async (
   for (const id of removedIds) {
     if (cfg.deleteRemoved && !cfg.dryRun) delete next[id];
   }
-  deps.saveBaseline(next);
+  deps.saveBaseline(next, today);
 };
