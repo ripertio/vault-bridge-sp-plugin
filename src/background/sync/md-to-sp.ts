@@ -82,10 +82,15 @@ export const mdToSp = async (
     const doneIds = new Set(
       ignoreFiltered.spTasks.filter((t) => t.isDone && t.id).map((t) => t.id as string),
     );
+    // A line unchecked in the file (the file wins) keeps its SP task in the diff, so the
+    // task is set back to not done. A checked line of a done task is already in sync.
+    const uncheckedIds = new Set(
+      ignoreFiltered.parsed.filter((t) => t.id && !t.completed).map((t) => t.id as string),
+    );
     const sync = removesDone(projectId)
       ? {
-          parsed: ignoreFiltered.parsed.filter((t) => !(t.id && doneIds.has(t.id))),
-          spTasks: ignoreFiltered.spTasks.filter((t) => !t.isDone),
+          parsed: ignoreFiltered.parsed.filter((t) => !(t.id && t.completed && doneIds.has(t.id))),
+          spTasks: ignoreFiltered.spTasks.filter((t) => !t.isDone || uncheckedIds.has(t.id as string)),
         }
       : ignoreFiltered;
     const operations = generateTaskOperations(sync.parsed, sync.spTasks, projectId);
