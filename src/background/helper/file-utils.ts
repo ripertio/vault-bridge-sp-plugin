@@ -203,3 +203,50 @@ export const renameSubfolder = async (
     throw new Error(nodeResult?.error || toErrorMessage(result.error) || 'rename failed');
   }
 };
+
+/**
+ * Refuse a path whose real location (symlinks resolved) is outside `root`. Works for
+ * a target that does not exist yet by resolving its nearest existing ancestor. A
+ * dangling symlink is refused too. Throws when the path is outside, so the caller
+ * must not touch the file.
+ */
+export const assertRealPathInside = async (root: string, target: string): Promise<void> => {
+  const result = await PluginAPI.executeNodeScript!({
+    script: `
+      const fs = require('fs');
+      const path = require('path');
+      try {
+        const realRoot = fs.realpathSync(path.resolve(args[0]));
+        const exists = (p) => {
+          try {
+            fs.lstatSync(p);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        let probe = path.resolve(args[1]);
+        const rest = [];
+        while (!exists(probe)) {
+          rest.unshift(path.basename(probe));
+          const parent = path.dirname(probe);
+          if (parent === probe) break;
+          probe = parent;
+        }
+        // realpathSync throws for a dangling symlink, which is refused below.
+        const real = path.join(fs.realpathSync(probe), ...rest);
+        const inside = real === realRoot || real.startsWith(realRoot + path.sep);
+        return inside ? { success: true } : { success: false, error: 'path resolves outside the vault' };
+      } catch (error) {
+        return { success: false, error: error.message };
+      }
+    `,
+    args: [root, target],
+    timeout: 5000,
+  });
+
+  const nodeResult = result.result as NodeScriptResult;
+  if (!result.success || !nodeResult?.success) {
+    throw new Error(nodeResult?.error || toErrorMessage(result.error) || 'path check failed');
+  }
+};

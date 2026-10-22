@@ -1,4 +1,4 @@
-import { readTasksFile, writeTasksFile } from '../helper/file-utils';
+import { assertRealPathInside, readTasksFile, writeTasksFile } from '../helper/file-utils';
 import { log } from '../../shared/logger';
 import {
   DailyNoteCfg,
@@ -46,6 +46,8 @@ export const runDailyNoteDryRun = async (
   }
 
   const notePath = resolveInsideVault(cfg.vaultPath, dailyNoteRelativePath(cfg, now));
+  // Symlinks are resolved too: a link inside the vault must not lead the note outside it.
+  await assertRealPathInside(cfg.vaultPath, notePath);
 
   const [tags, tasks] = await Promise.all([PluginAPI.getAllTags(), PluginAPI.getTasks()]);
   const plannedIds = new Set(plannedTaskIdsForToday(tags));
@@ -124,7 +126,10 @@ export const runDailyNoteDryRun = async (
   const rolloverDue = cfg.rolloverOverdue && deps.getRolloverDay?.() !== today;
   let carriedCount = 0;
   if (rolloverDue && section) {
-    const previous = await readPreviousNote(cfg, now, readTasksFile);
+    const previous = await readPreviousNote(cfg, now, async (p) => {
+      await assertRealPathInside(cfg.vaultPath, p);
+      return readTasksFile(p);
+    });
     if (previous) {
       const overdueIds = findOverdueIds(previous.lines, spIsDone);
       const body = working.slice(section.bodyStart, section.bodyEnd).join('\n');

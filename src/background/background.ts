@@ -18,7 +18,7 @@ import { resolveDailyNoteCfg } from './daily/daily-note';
 import { validateDailySettings } from './daily/daily-settings';
 import { validateProjectsDirCfg, resolveProjectsDirCfg } from './projects/project-dir';
 import { computeEffectiveBindings } from './projects/effective-bindings';
-import { listSubfolders, renameSubfolder } from './helper/file-utils';
+import { assertRealPathInside, listSubfolders, renameSubfolder } from './helper/file-utils';
 import { planRenames } from './projects/rename';
 import { migrateManualBindings } from './projects/migrate-bindings';
 import { effectiveVaultPath, validateVaultPath } from './vault';
@@ -359,6 +359,7 @@ const startBindings = async (): Promise<void> => {
   if (projectsDir.enabled && vaultPath) {
     try {
       const absDir = `${vaultPath.replace(/[\\/]+$/, '')}/${projectsDir.projectsDir}`;
+      await assertRealPathInside(vaultPath, absDir);
       const folders = await listSubfolders(absDir);
       const projects = (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title }));
       const writeMode = !dailyCfg().dryRun;
@@ -444,6 +445,7 @@ const startBindings = async (): Promise<void> => {
       await runProjectsReconcile(plan, absDir, projectsDir.taskFileName, dailyCfg().dryRun, {
         askCreateProject: askAboutNewFolder,
         writeBacklog: async (binding) => {
+          await assertRealPathInside(vaultPath, binding.filePath);
           await spToMd(binding);
         },
       });
