@@ -24,13 +24,14 @@ import { resolveDailyNoteCfg } from './daily/daily-note';
 import { validateDailySettings } from './daily/daily-settings';
 import { validateProjectsDirCfg, resolveProjectsDirCfg } from './projects/project-dir';
 import { computeEffectiveBindings } from './projects/effective-bindings';
-import { assertRealPathInside, listExistingFiles, listSubfolders, renameSubfolder } from './helper/file-utils';
+import { assertRealPathInside, listSubfolders, renameSubfolder } from './helper/file-utils';
 import { planRenames } from './projects/rename';
 import { migrateManualBindings } from './projects/migrate-bindings';
 import { effectiveVaultPath, validateVaultPath } from './vault';
 import { folderListChanged } from './projects/folder-poll';
 import { buildLinkTable, ignoreRow, unignoreRow } from './projects/link-table';
 import { validFolderName, validBindFile } from './projects/project-dir';
+import { boundFilesPresent, listProjectEntries } from './projects/project-entries';
 import { createSerialQueue } from './helper/serial-queue';
 import { INBOX_PROJECT_ID } from './daily/daily-plan';
 import { lazySetInterval } from './helper/lazy-set-interval';
@@ -410,27 +411,6 @@ const askAboutDeletedFolder = (deleted: DeletedFolder, title: string, writeMode:
   });
 };
 
-// Manual binds to a .md file in the projects folder (for example "Inbox/backlog.md").
-// Only binds whose file exists, and whose real path stays in the vault, take part in matching.
-const boundFilesPresent = async (
-  vault: string,
-  absDir: string,
-  binds: Record<string, string>,
-): Promise<string[]> => {
-  const rels = Object.keys(binds).filter((k) => validBindFile(k));
-  if (rels.length === 0) return [];
-  const present: string[] = [];
-  for (const rel of await listExistingFiles(absDir, rels)) {
-    try {
-      await assertRealPathInside(vault, `${absDir}/${rel}`);
-      present.push(rel);
-    } catch {
-      // Outside the vault: not matched.
-    }
-  }
-  return present;
-};
-
 // The Inbox file: tasks in the SP Inbox (no project) are synced with the .md file set in
 // the vault section. Off when no file is set. Its real path is checked before it runs.
 const inboxBindings = async (vaultPath: string): Promise<SyncBindingCfg[]> => {
@@ -570,10 +550,8 @@ const runStartBindings = async (): Promise<void> => {
     projectsDir,
     vaultPath,
     {
-      listFolders: async (dir) => [
-        ...(await listSubfolders(dir)),
-        ...(await boundFilesPresent(effectiveVaultPath(currentConfig), dir, currentConfig.projectsDir?.folderBinds ?? {})),
-      ],
+      listFolders: (dir) =>
+        listProjectEntries(effectiveVaultPath(currentConfig), dir, currentConfig.projectsDir?.folderBinds ?? {}),
       getProjects: async () =>
         (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title })),
     },
@@ -623,7 +601,7 @@ const startFolderPoll = (): void => {
   const absDir = `${vaultPath.replace(/[\\/]+$/, '')}/${cfg.projectsDir}`;
   stopFolderPoll = lazySetInterval(async () => {
     try {
-      const folders = await listSubfolders(absDir);
+      const folders = await listProjectEntries(vaultPath, absDir, cfg.folderBinds ?? {});
       if (folderListChanged(lastFolderList, folders)) {
         lastFolderList = folders;
         await startBindings();
@@ -944,10 +922,9 @@ const dailyDeps = () => ({
         if (!vault) return { success: false, error: 'Set the vault path first.' };
         try {
           const absDir = `${vault.replace(/[\\/]+$/, '')}/${dirCfg.projectsDir}`;
-          const folders = await listSubfolders(absDir);
-          const bound = await boundFilesPresent(vault, absDir, dirCfg.folderBinds ?? {});
+          const entries = await listProjectEntries(vault, absDir, dirCfg.folderBinds ?? {});
           const projects = (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title }));
-          return { success: true, rows: buildLinkTable([...folders, ...bound], projects, dirCfg.excluded, dirCfg.folderBinds ?? {}) };
+          return { success: true, rows: buildLinkTable(entries, projects, dirCfg.excluded, dirCfg.folderBinds ?? {}) };
         } catch (err) {
           return { success: false, error: err instanceof Error ? err.message : String(err) };
         }
