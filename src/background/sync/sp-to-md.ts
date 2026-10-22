@@ -2,6 +2,7 @@ import type { Task } from '@super-productivity/plugin-api';
 import { writeTasksFile, readTasksFile } from '../helper/file-utils';
 import { stripStatusTags } from './markdown-parser';
 import { ignoredIdsInMarkdown, isIgnoredTitle } from './ignore-tag';
+import { removesDone } from './inbox-done';
 import { SyncBindingCfg } from '../local-config';
 
 /** Regex that matches a markdown task checkbox line (with optional leading indent). */
@@ -82,8 +83,10 @@ export const spToMd = async (config: SyncBindingCfg): Promise<void> => {
   allTasks
     .filter((task) => task.projectId === config.projectId && isIgnoredTitle(task.title))
     .forEach((task) => keepIds.add(task.id));
+  // Done tasks of the Inbox file are left out, so their lines are removed (inbox-done.ts).
+  const dropDone = removesDone(config.projectId);
   const projectTasks = allTasks.filter(
-    (task) => task.projectId === config.projectId && !keepIds.has(task.id),
+    (task) => task.projectId === config.projectId && !keepIds.has(task.id) && !(dropDone && task.isDone),
   );
 
   // If project has taskIds, use them to order the parent tasks

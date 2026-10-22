@@ -107,6 +107,7 @@
             <label for="inboxFile">Inbox file (tasks in the Inbox without a project)</label>
             <input type="text" id="inboxFile" placeholder="Inbox/Unsorted.md" />
             <span class="file-hint">Path inside the vault, relative to it. Empty turns the Inbox sync off.</span>
+            <label><input type="checkbox" id="inboxRemoveDone" /> Remove checked tasks from the Inbox file (the SP task stays)</label>
           </div>
           <div class="actions">
             <button type="submit" class="btn btn-primary" id="vaultSaveBtn">Save Vault</button>
@@ -317,6 +318,7 @@
             loadProjectsForm(data.projectsDir || {});
             document.getElementById('vaultPath').value = data.vaultPath || (data.daily && data.daily.vaultPath) || '';
         document.getElementById('inboxFile').value = data.inboxFile || '';
+        document.getElementById('inboxRemoveDone').checked = !!data.inboxRemoveDone;
           }
 
 
@@ -667,6 +669,7 @@
             type: 'saveVaultPath',
             path: document.getElementById('vaultPath').value,
             inboxFile: document.getElementById('inboxFile').value.trim(),
+            inboxRemoveDone: document.getElementById('inboxRemoveDone').checked,
           });
           if (!res || !res.success) throw new Error((res && res.error) || 'no response from background');
           document.getElementById('vaultPath').value = res.path;

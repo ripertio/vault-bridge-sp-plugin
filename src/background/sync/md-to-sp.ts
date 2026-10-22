@@ -1,5 +1,6 @@
 import { parseMarkdownWithHeader } from './markdown-parser';
 import { withoutIgnored } from './ignore-tag';
+import { removesDone } from './inbox-done';
 import { generateTaskOperations } from './generate-task-operations';
 // import { Task } from '@super-productivity/plugin-api';
 
@@ -75,7 +76,18 @@ export const mdToSp = async (
 
     // Generate operations with validation
     // Tasks tagged #ignore (and their children) are left out on both sides (ignore-tag.ts).
-    const sync = withoutIgnored(parsedTasks, projectTasks);
+    const ignoreFiltered = withoutIgnored(parsedTasks, projectTasks);
+    // Done tasks of the Inbox file are left out of both sides (inbox-done.ts): a line
+    // checked in the file still marks its task done, but a missing line is never a delete.
+    const doneIds = new Set(
+      ignoreFiltered.spTasks.filter((t) => t.isDone && t.id).map((t) => t.id as string),
+    );
+    const sync = removesDone(projectId)
+      ? {
+          parsed: ignoreFiltered.parsed.filter((t) => !(t.id && doneIds.has(t.id))),
+          spTasks: ignoreFiltered.spTasks.filter((t) => !t.isDone),
+        }
+      : ignoreFiltered;
     const operations = generateTaskOperations(sync.parsed, sync.spTasks, projectId);
 
     // Execute in two ordered phases so a deleted parent never cascades onto a

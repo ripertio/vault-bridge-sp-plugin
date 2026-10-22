@@ -40,6 +40,8 @@ export interface LocalUserCfgV2 {
   // Vault-relative .md file that holds the tasks of the SP Inbox (no project). Optional;
   // absent or empty means the Inbox is not synced to a file.
   inboxFile?: string;
+  // Off by default. When on, a task that is done in SP is removed from the Inbox file.
+  inboxRemoveDone?: boolean;
   // Daily-note settings. Optional so existing configs stay valid; absent means
   // the defaults in daily/daily-note.ts (feature OFF, dry-run ON).
   daily?: Partial<DailyNoteCfg>;

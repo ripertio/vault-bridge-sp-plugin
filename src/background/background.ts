@@ -34,6 +34,7 @@ import { validFolderName, validBindFile } from './projects/project-dir';
 import { INBOX_PROJECT_ID } from './daily/daily-plan';
 import { lazySetInterval } from './helper/lazy-set-interval';
 import { setIgnoreTagEnabled } from './sync/ignore-tag';
+import { setInboxRemoveDone } from './sync/inbox-done';
 import { spToMd } from './sync/sp-to-md';
 import { createSpProject } from './sync/missing-resource';
 import { planReconcile } from './projects/reconcile';
@@ -434,6 +435,7 @@ const startBindings = async (): Promise<void> => {
   const projectsDir = resolveProjectsDirCfg(currentConfig.projectsDir);
   // The #ignore rule is read by the sync code at each sync, so it is set before any sync.
   setIgnoreTagEnabled(projectsDir.respectIgnoreTag);
+  setInboxRemoveDone(currentConfig.inboxRemoveDone === true);
   const vaultPath = effectiveVaultPath(currentConfig);
 
   // Auto mode: create what is missing on either side. Write mode follows the daily
@@ -989,8 +991,12 @@ const dailyDeps = () => ({
           if (rel && !validBindFile(rel)) return { success: false, error: 'Inbox file must be a .md file inside the vault.' };
           inboxFile = rel || undefined;
         }
-        const inboxChanged = inboxFile !== currentConfig.inboxFile || result.path !== currentConfig.vaultPath;
-        currentConfig = { ...currentConfig, vaultPath: result.path, inboxFile };
+        const removeDone = message.inboxRemoveDone !== undefined ? message.inboxRemoveDone === true : currentConfig.inboxRemoveDone === true;
+        const inboxChanged =
+          inboxFile !== currentConfig.inboxFile ||
+          removeDone !== (currentConfig.inboxRemoveDone === true) ||
+          result.path !== currentConfig.vaultPath;
+        currentConfig = { ...currentConfig, vaultPath: result.path, inboxFile, inboxRemoveDone: removeDone };
         persistConfig();
         startFolderPoll();
         if (inboxChanged) void startBindings();
