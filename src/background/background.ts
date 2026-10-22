@@ -876,7 +876,9 @@ const dailyDeps = () => ({
 
   migrateBindingsOnce();
   activeBindingsJson = JSON.stringify(currentConfig?.bindings ?? []);
-  if (resolveProjectsDirCfg(currentConfig.projectsDir).enabled || (currentConfig?.bindings?.length ?? 0) > 0) {
+  // The Inbox file counts too: an Inbox-only setup must sync again after a restart.
+  const hasInboxFile = (currentConfig.inboxFile ?? '').trim() !== '';
+  if (resolveProjectsDirCfg(currentConfig.projectsDir).enabled || (currentConfig?.bindings?.length ?? 0) > 0 || hasInboxFile) {
     await startBindings();
   }
   startFolderPoll();
