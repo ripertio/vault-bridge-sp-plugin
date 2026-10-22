@@ -7,7 +7,7 @@ Result of a `/code-review` run on 2026-10-22, branch `feature/obsidian-sync`. Te
 | 1 | Daily notes | `src/background/daily/daily-runner.ts:203` | SP tasks are created before the "changed during planning" guard, which then skips stamping their IDs (fixed) |
 | 2 | Daily notes | `src/background/daily/daily-runner.ts:194` | Early return skips saving the baseline after reverse updates and deletes (fixed) |
 | 3 | Startup | `src/background/background.ts:897` | An Inbox-only setup does not start syncing after a restart (fixed) |
-| 4 | Daily notes | `src/background/background.ts:1031` | Changing the vault path does not restart the daily-note watcher |
+| 4 | Daily notes | `src/background/background.ts:1031` | Changing the vault path does not restart the daily-note watcher (fixed) |
 | 5 | Daily notes | `src/background/daily/daily-runner.ts:112` | A task missing from `getTasks()` is treated as gone and its line is removed |
 | 6 | Daily notes | `src/background/daily/daily-runner.ts:74` | The reverse diff uses the raw baseline, not the day-scoped one (fixed) |
 | 7 | Projects | `src/background/background.ts:454` | `startBindings` has no serialization and can undo its own updates (fixed) |
@@ -54,6 +54,8 @@ The startup run, the watcher's `notifyOnCreate`, `taskUpdate` and the day-change
 **Scenario.** Edits to the note in the new vault do not trigger a sync until the next task hook, midnight or a restart. If the old vault is gone, the watcher reports nothing.
 
 **Direction.** Restart the watcher when the vault path changes.
+
+**Fixed.** `saveVaultPath` restarts the daily-note watcher, as `saveDailySettings` already does. The message handler has no unit test harness, so this one is checked by reading only.
 
 ## 5. Missing task treated as deleted
 

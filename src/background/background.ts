@@ -1012,6 +1012,8 @@ const dailyDeps = () => ({
         currentConfig = { ...currentConfig, vaultPath: result.path, inboxFile, inboxRemoveDone: removeDone };
         persistConfig();
         startFolderPoll();
+        // The daily note lives under the vault, so the watcher must follow the new path.
+        startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), watchDailyNote);
         if (inboxChanged) void startBindings();
         return { success: true, path: result.path, inboxFile: inboxFile ?? '' };
       }
