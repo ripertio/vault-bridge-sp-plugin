@@ -277,6 +277,36 @@ describe('runDailyNoteDryRun', () => {
     expect(batch).not.toHaveBeenCalled();
   });
 
+  const removedLineSetup = () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--i1--> Inbox task\n');
+    setSp(['p1', 'i1']);
+    const updateTask = jest.fn().mockResolvedValue(undefined);
+    (global as any).PluginAPI = { ...(global as any).PluginAPI, updateTask };
+    const saveBaseline = jest.fn();
+    const withBaseline = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Project task' }, i1: { isDone: false, title: 'Inbox task' } }),
+      getBaselineDay: () => '2026-10-21',
+      saveBaseline,
+    };
+    return { updateTask, saveBaseline, withBaseline };
+  };
+
+  it('takes a task off Today (keeps it) when its line is removed and deleteRemoved is off', async () => {
+    const { updateTask, saveBaseline, withBaseline } = removedLineSetup();
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, withBaseline, NOW);
+    expect(updateTask).toHaveBeenCalledWith('p1', { dueDay: null });
+    expect(updateTask).not.toHaveBeenCalledWith('i1', expect.anything());
+    // The line is not written back, and the baseline forgets it.
+    expect(mockedWrite).not.toHaveBeenCalledWith(expect.anything(), expect.stringContaining('<!--p1-->'));
+    expect(saveBaseline.mock.calls[0][0]).not.toHaveProperty('p1');
+  });
+
+  it('does not unschedule in dry-run', async () => {
+    const { updateTask, withBaseline } = removedLineSetup();
+    await runDailyNoteDryRun({ ...cfg, dryRun: true }, withBaseline, NOW);
+    expect(updateTask).not.toHaveBeenCalled();
+  });
+
   it('deletes via the shared batch op when deleteRemoved is on and writes are on', async () => {
     mockedRead.mockResolvedValue('## To Dos\n- [ ] <!--i1--> Inbox task\n');
     setSp([]);

@@ -101,8 +101,20 @@ const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): P
   const noteHasIds = lines.some((l) => parseNoteTaskLine(l) !== null);
   const removedIds = noteHasIds ? findRemovedBaselineIds(lines, baselineForToday) : [];
   const deletedIds = new Set<string>();
+  // Without the delete opt-in, a removed line means "not today": the task stays in SP
+  // but is taken off Today, so the forward pass does not write the line back.
+  const unscheduledIds = new Set<string>();
   if (removedIds.length > 0) {
     log.log(`  - ${removedIds.length} task line(s) removed from the note`);
+    if (!cfg.deleteRemoved && !cfg.dryRun) {
+      for (const id of removedIds) {
+        if (!updatedTasks.some((t) => t.id === id)) continue;
+        log.log(`  ↓ unschedule ${id} from today`);
+        const unschedule: ScheduledTaskFields = { dueDay: null };
+        await PluginAPI.updateTask(id, unschedule as Parameters<typeof PluginAPI.updateTask>[1]);
+        unscheduledIds.add(id);
+      }
+    }
     if (cfg.deleteRemoved && !cfg.dryRun) {
       const byProject = new Map<string, string[]>();
       for (const id of removedIds) {
@@ -121,7 +133,7 @@ const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): P
   // Deleted tasks must not be planned, or the forward pass writes their lines back.
   const tasks = updatedTasks.filter((t) => !deletedIds.has(t.id));
   const planned: DailyPlanTask[] = tasks
-    .filter((t) => plannedIds.has(t.id))
+    .filter((t) => plannedIds.has(t.id) && !unscheduledIds.has(t.id))
     .map((t) => ({ id: t.id, title: t.title, isDone: t.isDone, projectId: t.projectId }));
 
   // 1b) Create: task lines the user typed (no ID) become SP tasks in the Inbox.
@@ -231,7 +243,7 @@ const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): P
   if (cfg.dryRun) return;
   // Reverse updates and SP deletes are already applied, so they count as changes too.
   // Otherwise the baseline is not saved and the next run undoes them.
-  const spChanges = reverse.length + (cfg.deleteRemoved ? removedIds.length : 0);
+  const spChanges = reverse.length + (cfg.deleteRemoved ? removedIds.length : unscheduledIds.size);
   if (fileChanges === 0 && spChanges === 0) {
     if (rolloverDue) deps.saveRolloverDay?.(today);
     return;
@@ -279,7 +291,7 @@ const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): P
   // A removed line is resolved once the user has answered: drop it from the
   // baseline either way, so the question is not asked again on every run.
   for (const id of removedIds) {
-    if (cfg.deleteRemoved && !cfg.dryRun) delete next[id];
+    if ((cfg.deleteRemoved || unscheduledIds.has(id)) && !cfg.dryRun) delete next[id];
   }
   deps.saveBaseline(next, today);
 };
