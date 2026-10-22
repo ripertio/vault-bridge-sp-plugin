@@ -1,9 +1,10 @@
 import { log } from '../../shared/logger';
 
 /**
- * The rename approval dialog. Two choices: rename (the folder or the SP project, to
- * match the other side) or keep for now (nothing is renamed; the question comes back
- * after a restart). Nothing is renamed unless the user presses Rename.
+ * The rename approval dialog. Three choices: Rename (the folder or the SP project, to
+ * match the other side), Ignore (keep both names and link them as they are), or Keep
+ * for now (nothing changes; the question comes back after a restart). Nothing is
+ * renamed unless the user presses Rename.
  *
  * `openDialog` is not in the `^1.0.1` API types, so it is feature-detected through a
  * narrow local cast, the same way folder-delete-dialog.ts does it. Its promise resolves
@@ -22,6 +23,11 @@ interface OpenDialogApi {
 
 export type RenameKind = 'folder' | 'project';
 
+export interface RenameHandlers {
+  onRename: () => void | Promise<void>;
+  onIgnore: () => void | Promise<void>;
+}
+
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
@@ -33,7 +39,7 @@ export const showRenameDialog = async (
   kind: RenameKind,
   from: string,
   to: string,
-  onRename: () => void | Promise<void>,
+  handlers: RenameHandlers,
 ): Promise<boolean> => {
   const api = PluginAPI as unknown as OpenDialogApi;
   if (typeof api.openDialog !== 'function') {
@@ -50,9 +56,11 @@ export const showRenameDialog = async (
     htmlContent:
       '<h3>sync.md Multi — rename</h3>' +
       `<p>A rename was detected. Rename ${what}?</p>` +
+      '<p>Ignore — keep both names and link them as they are. The question is not asked again.</p>' +
       '<p>Keep for now — the question comes back after a restart.</p>',
     buttons: [
-      { label: 'Rename', color: 'primary', onClick: onRename },
+      { label: 'Rename', color: 'primary', onClick: handlers.onRename },
+      { label: 'Ignore', onClick: handlers.onIgnore },
       { label: 'Keep for now' },
     ],
   });

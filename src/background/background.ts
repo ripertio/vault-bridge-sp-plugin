@@ -293,20 +293,37 @@ const askAboutRename = (r: PendingRename, absDir: string): void => {
   const key = `${r.kind}:${r.projectId}:${r.from}>${r.to}`;
   if (askedRenames.has(key)) return;
   askedRenames.add(key);
-  void showRenameDialog(r.kind, r.from, r.to, async () => {
-    try {
-      if (r.kind === 'folder') await renameSubfolder(absDir, r.from, r.to);
-      else await PluginAPI.updateProject(r.projectId, { title: r.to });
-      currentConfig = {
-        ...currentConfig,
-        _projectLinks: { ...(currentConfig._projectLinks ?? {}), [r.projectId]: r.to },
-      };
+  void showRenameDialog(r.kind, r.from, r.to, {
+    onRename: async () => {
+      try {
+        if (r.kind === 'folder') await renameSubfolder(absDir, r.from, r.to);
+        else await PluginAPI.updateProject(r.projectId, { title: r.to });
+        currentConfig = {
+          ...currentConfig,
+          _projectLinks: { ...(currentConfig._projectLinks ?? {}), [r.projectId]: r.to },
+        };
+        persistConfig();
+        log.log(`renamed ${r.kind === 'folder' ? 'folder' : 'SP project'} "${r.from}" → "${r.to}"`);
+        void startBindings();
+      } catch (err) {
+        log.error(`could not rename "${r.from}" to "${r.to}"`, err);
+      }
+    },
+    // Keep both names. The folder that exists now is bound to the project by name, so
+    // the two stay linked as they are and the rename is not asked again.
+    onIgnore: () => {
+      const folder = r.kind === 'folder' ? r.from : r.to;
+      const dirCfg = resolveProjectsDirCfg(currentConfig.projectsDir);
+      const binds: Record<string, string> = {};
+      for (const [k, v] of Object.entries(dirCfg.folderBinds ?? {})) {
+        if (k !== folder && v !== r.projectId) binds[k] = v;
+      }
+      binds[folder] = r.projectId;
+      currentConfig = { ...currentConfig, projectsDir: { ...dirCfg, folderBinds: binds } };
       persistConfig();
-      log.log(`renamed ${r.kind === 'folder' ? 'folder' : 'SP project'} "${r.from}" → "${r.to}"`);
+      log.log(`kept "${r.from}" and "${r.to}" as they are, bound folder "${folder}"`);
       void startBindings();
-    } catch (err) {
-      log.error(`could not rename "${r.from}" to "${r.to}"`, err);
-    }
+    },
   });
 };
 
@@ -371,7 +388,10 @@ const startBindings = async (): Promise<void> => {
       // Renames are never applied here. Each one is shown in SP and applied only when the
       // user approves it. Until then its project and names are held for this run, so
       // nothing is created, deleted or re-linked because of it.
-      const renames = planRenames(links, folders, projects, previousFolders);
+      // Projects bound by name were kept on purpose ("Ignore"): they are not renamed.
+      const boundIds = new Set(Object.values(projectsDir.folderBinds ?? {}));
+      const renameLinks = Object.fromEntries(Object.entries(links).filter(([id]) => !boundIds.has(id)));
+      const renames = planRenames(renameLinks, folders, projects, previousFolders);
       const pending: PendingRename[] = [
         ...renames.renameFolders.map((r) => ({ kind: 'folder' as const, ...r })),
         ...renames.renameProjects.map((r) => ({ kind: 'project' as const, ...r })),
