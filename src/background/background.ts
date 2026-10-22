@@ -31,6 +31,7 @@ import { effectiveVaultPath, validateVaultPath } from './vault';
 import { folderListChanged } from './projects/folder-poll';
 import { buildLinkTable, ignoreRow, unignoreRow } from './projects/link-table';
 import { validFolderName, validBindFile } from './projects/project-dir';
+import { createSerialQueue } from './helper/serial-queue';
 import { INBOX_PROJECT_ID } from './daily/daily-plan';
 import { lazySetInterval } from './helper/lazy-set-interval';
 import { setInboxRemoveDone } from './sync/inbox-done';
@@ -451,7 +452,9 @@ const inboxBindings = async (vaultPath: string): Promise<SyncBindingCfg[]> => {
 
 // Bindings that should run now: the manual list, or the folder-derived list when
 // auto mode is on. A failed folder scan starts nothing (see effective-bindings.ts).
-const startBindings = async (): Promise<void> => {
+// Runs are queued: the folder poll, the debounce and the UI can all call this at once,
+// and two overlapping runs would rebuild the registry twice and overwrite each other's config.
+const runStartBindings = async (): Promise<void> => {
   const projectsDir = resolveProjectsDirCfg(currentConfig.projectsDir);
   setInboxRemoveDone(currentConfig.inboxRemoveDone === true);
   const vaultPath = effectiveVaultPath(currentConfig);
@@ -502,7 +505,7 @@ const startBindings = async (): Promise<void> => {
           excluded = ignoreRow(excluded, r.folder);
         }
         if (writeMode && excluded !== projectsDir.excluded) {
-          currentConfig = { ...currentConfig, projectsDir: { ...projectsDir, excluded } };
+          currentConfig = { ...currentConfig, projectsDir: { ...resolveProjectsDirCfg(currentConfig.projectsDir), excluded } };
         }
       }
       // Matched against the folders plus the bound .md files, with the binds applied, so a
@@ -589,6 +592,9 @@ const startBindings = async (): Promise<void> => {
   }
   initSyncRegistry([...result.bindings, ...inbox], currentConfig._lastSynced ?? {});
 };
+
+const bindingsQueue = createSerialQueue();
+const startBindings = (): Promise<void> => bindingsQueue(runStartBindings);
 
 // projectListUpdate can fire several times in a row (e.g. while SP is busy). One
 // run after a short quiet period avoids duplicate project creation attempts.
