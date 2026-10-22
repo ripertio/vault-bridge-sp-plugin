@@ -2,6 +2,8 @@
 
 - Make small, reviewable commits, with one feature step per commit. Add or update
   focused tests with every feature step.
+- After each commit, start a new Claude session for the next feature step, so
+  earlier conversation is not re-read on every turn.
 - Every new synchronization behavior must be controlled by a user setting that
   defaults to OFF. Provide a dry-run mode that logs intended changes without
   writing files or mutating Super Productivity.
@@ -20,5 +22,9 @@
   observations or internal SP APIs.
 - Keep the existing bidirectional project/file behavior working unless a
   deliberate, tested behavior change is part of the requested feature.
-- Run the focused tests for changed behavior, then `npm run build` and
-  `npx tsc --noEmit` when changes affect the plugin bundle or TypeScript.
+- Run the focused tests for changed behavior. Do not run `npm run build` or
+  `npx tsc --noEmit` yourself; the user runs them. Ask the user to run them
+  when a change affects the plugin bundle or TypeScript, and paste back only
+  the errors.
+- Do not read `package-lock.json`, `dist/`, `node_modules/`, or the
+  `sync-md-multi-v0.4.6.zip` archive unless the user asks.
