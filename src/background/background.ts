@@ -1,4 +1,10 @@
-import { initSyncRegistry, syncAllNow, setConfigBridge, shutdownSyncRegistry } from './sync/sync-manager';
+import {
+  initSyncRegistry,
+  syncAllNow,
+  setConfigBridge,
+  shutdownSyncRegistry,
+  isStructuralTaskAction,
+} from './sync/sync-manager';
 import { loadLocalConfig, saveLocalConfig } from './local-config';
 import type { LocalUserCfgV2 } from './local-config';
 import { fetchLatestRelease, isNewerVersion } from './update-check';
@@ -1011,6 +1017,16 @@ const dailyDeps = () => ({
   PluginAPI.registerHook('taskUpdate' as any, () =>
     scheduleDailyNoteRun(() => dailyCfg(), dailyDeps()),
   );
+
+  // A new task (`[Task] Add Task`) fires no taskUpdate, so it would only reach the note on
+  // the next check. The action hook sees it; only structural task actions schedule a run.
+  PluginAPI.registerHook('action' as any, (...args: unknown[]) => {
+    const raw = args[0] as { type?: string; action?: { type?: string } } | undefined;
+    const type = raw?.type ?? raw?.action?.type;
+    if (typeof type === 'string' && isStructuralTaskAction(type)) {
+      scheduleDailyNoteRun(() => dailyCfg(), dailyDeps());
+    }
+  });
 
   // ── Project list cache (non-critical → fire-and-forget) ───────────────────
   // Only populates the iframe dropdown; must NOT block the detection wiring
