@@ -80,6 +80,8 @@ To avoid sync loops, a write-back triggered right after a file→SP import is br
 - If the `.md` file does not exist, your SP tasks are written to it (creating the file).
 - If the `.md` file already exists, its tasks are imported into SP and the task IDs are stamped into the file immediately — no restart required.
 
+**Projects with several files.** With the "Sync every .md file" option, all `.md` files of a project folder are one task list for SP. A task is deleted only when its `<!--id-->` is in none of them; the same ID in two files counts once. New SP tasks are written to the task file only; other files update the lines they already hold.
+
 ## When a file or project goes missing
 
 A binding must never keep running in a broken state. If a sync finds that a resource it depends on is gone, the plugin stops and shows a dialog asking you how to proceed. There are two cases.

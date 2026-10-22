@@ -26,7 +26,7 @@ Pure logic (parsing, planning, diffing) is kept apart from I/O, and the pure par
 
 ### 1. Sync engine (`sync/`)
 
-One *binding* ties an SP project to one `.md` file. `sync-manager.ts` owns a session per binding.
+One *binding* ties an SP project to one `.md` file. With the multi-file option a project has several bindings, one per file (see Projects folder below). `sync-manager.ts` owns a session per binding.
 
 - `markdown-parser.ts` reads a file into tasks (two levels, notes, `@done`, `<!--id-->` markers).
 - `generate-task-operations.ts` diffs file tasks against SP tasks and produces create, update, delete and reorder operations.
@@ -56,7 +56,7 @@ The plugin never removes a folder or file. This is enforced by `no-folder-delete
 
 ### 3. Daily notes (`daily/`)
 
-Sync between SP's *Today* list and `## To Dos` in the day's note.
+Sync between SP's *Today* list and the To Dos section of the day's note. The heading is a setting (`todosHeading`, default `## To Dos`), and the section ends at the next heading of the same or a higher level.
 
 | Step | Module | Direction |
 | --- | --- | --- |
@@ -68,6 +68,8 @@ Sync between SP's *Today* list and `## To Dos` in the day's note.
 | Schedule runs, detect day change | `daily-scheduler.ts` | n/a |
 | Validate settings | `daily-settings.ts` | n/a |
 
+A run is scheduled (debounced 2 s) by `taskUpdate`, by structural task actions and by Today-planning actions (`isTodayPlanningAction`, matched by name fragment because SP's action names vary), by edits to the note, and by the day change.
+
 The reverse step compares the note with a **baseline**, the last state the plugin wrote for each task, saved per device. Without it the plugin could not tell which side changed. When both changed the same checkbox, SP wins. A baseline from a different day is not trusted for removals.
 
 ## Safety model
@@ -75,7 +77,7 @@ The reverse step compares the note with a **baseline**, the last state the plugi
 - **Opt-in everywhere.** Daily notes, project sync and every delete or cleanup option default to off. Daily notes also default to dry-run.
 - **Path boundary.** `resolveInsideVault` rejects `..` and absolute paths. `assertRealPathInside` then resolves symlinks before every daily-note and project-folder write.
 - **Confirm before structure changes.** Creating, renaming or removing a project or folder always goes through an SP dialog.
-- **No silent deletes.** Deleting an SP task from a daily note needs its own setting and write mode. The plugin never deletes vault content.
+- **No silent deletes.** Deleting an SP task from a daily note needs its own setting and write mode. With it off, a removed line only clears the task's `dueDay`, so it leaves Today and stays in SP. The plugin never deletes vault content.
 - **Abort on parse errors.** A file that fails to parse is never written back over.
 
 ## Device-local state
@@ -100,7 +102,7 @@ The plugin follows the documented plugin API wherever it can. These uses go beyo
 
 | Use | Where | Notes |
 | --- | --- | --- |
-| `dueDay` on created tasks | `daily-note.ts` (`ScheduledTaskFields`) | Schedules a task created from a daily note. |
+| `dueDay` on created tasks, and `dueDay: null` on `updateTask` | `daily-note.ts` (`ScheduledTaskFields`), `daily-runner.ts` | Schedules a task created from a daily note, and takes a task off Today when its line is removed. Both verified live. |
 | `anyTaskUpdate` and `projectListUpdate` hooks | `manifest.json` | Used to react to task and project changes. |
 | `batchUpdateForProject` | `sync/md-to-sp.ts` | Applies a whole import in one call. Verified live for the Inbox project. |
 

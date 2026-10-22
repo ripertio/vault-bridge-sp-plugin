@@ -10,7 +10,7 @@ It runs inside SP as a plugin. It needs no Obsidian plugin, because it reads and
 
 | Area | SP side | Vault side |
 | --- | --- | --- |
-| **Projects** | One SP project per folder | `Projects/<Project>/backlog.md` |
+| **Projects** | One SP project per folder | `Projects/<Project>/backlog.md`, plus any other `.md` files in the folder (optional) |
 | **Daily note** | Tasks planned for **Today** | `## To Dos` section of `Daily/YYYY-MM-DD.md` |
 | **Inbox** | Tasks that belong to no project | One file you choose, e.g. `Inbox/Unsorted.md` |
 | **Manual bindings** | Any SP project | Any `.md` file |
@@ -18,8 +18,9 @@ It runs inside SP as a plugin. It needs no Obsidian plugin, because it reads and
 - **Two-way task sync.** Titles, checkboxes, notes, order and sub-tasks follow edits on either side.
 - **Stable task IDs.** Each task line carries its SP ID as an HTML comment (`<!--id-->`), so renames and moves never create duplicates. Obsidian hides these comments in reading view.
 - **Folder-driven projects.** Create a folder and the plugin offers to create the SP project. Create an SP project and it offers to create the folder. Renames propagate in both directions, always after a confirmation dialog in SP.
-- **Daily notes.** Today's planned tasks are added to the note. Checkbox and title edits sync both ways. Lines you type into `## To Dos` become new SP tasks scheduled for that day. Unfinished tasks can roll over to the next day's note.
-- **Safety first.** Every vault feature is **off by default**. Daily notes start in **dry-run**, which only logs what it would do. The plugin never removes a vault file or folder. Deleting SP tasks from a daily note is opt-in. Removing a project or folder always needs a confirmation dialog.
+- **Several files per project (optional).** Every `.md` file in a project folder, subfolders included, can sync with the same SP project. Notes such as `ideas.md` keep their own tasks, and new SP tasks go to `backlog.md`.
+- **Daily notes.** Today's planned tasks are added to the note, under a heading you choose. Checkbox and title edits sync both ways. Lines you type under it become new SP tasks scheduled for that day. A line you delete means "not today": the task leaves Today and stays in its project or the Inbox. Unfinished tasks can roll over to the next day's note. Moving a task to Today in SP updates the note within a few seconds.
+- **Safety first.** Every vault feature is **off by default**. Daily notes start in **dry-run**, which only logs what it would do. The plugin never removes a vault file or folder. Deleting SP tasks for real from a daily note is opt-in. Removing a project or folder always needs a confirmation dialog.
 
 ## Requirements
 
@@ -51,12 +52,13 @@ Settings are stored per device, because they hold absolute paths. Each section h
 | --- | --- | --- |
 | Enable daily notes | off | Nothing is read or written for daily notes until this is on. |
 | Write to the note | off (dry-run) | While off, the plugin only logs what it would change. |
-| Delete the SP task when its line is removed | off | Opt-in. Applies in write mode only. |
+| Delete the SP task when its line is removed | off | Opt-in, write mode only. Off: removing a line only takes the task off Today and keeps it in SP. |
 | Roll unfinished tasks into today's note | off | Once per day, carries unchecked tasks from the latest earlier note (up to 7 days back) into today's `## To Dos`. |
+| Heading for tasks in the note | `## To Dos` | Tasks are added under this heading. Without a leading `#`, `## ` is added. The section ends at the next heading of the same or a higher level. |
 | Daily notes folder | `Daily` | Inside the vault. |
 | Filename format | `YYYY-MM-DD` | Tokens `YYYY`, `MM`, `DD`. A live preview shows today's name. |
 
-The note must already exist and contain a `## To Dos` heading. An empty note gets the heading added. Nothing else in the note is touched.
+The note must already exist and contain the heading. An empty note gets the heading added. Nothing else in the note is touched.
 
 ```markdown
 ## To Dos
@@ -71,10 +73,22 @@ The note must already exist and contain a `## To Dos` heading. An empty note get
 | --- | --- | --- |
 | Sync every folder under the projects folder | off | Each sub-folder maps to the SP project with the same title. |
 | Projects folder | `Projects` | Relative to the vault path. |
-| Task file name | `backlog.md` | Created inside each project folder. |
+| Task file name | `backlog.md` | Created inside each project folder. New SP tasks are written to this file. |
+| Sync every .md file in a project folder | off | Other `.md` files in the folder, subfolders included (6 levels), sync with the same project. See below. |
 | Ask when a linked folder is deleted | off | Asks in SP whether to unlink the project or remove it. |
 | Exclude removed projects | off | A project removed in SP is added to the excluded list, so its folder is not offered again. |
 | Excluded | empty | Folder names and project titles to leave out on both sides. |
+
+#### Several files per project
+
+With **Sync every .md file** on, each `.md` file under a project folder is synced with that project.
+
+- A new line without an ID in any file becomes an SP task, and its ID is written back to that same file.
+- Tasks created in SP go to the task file (`backlog.md`) only. Other files only update lines they already hold.
+- Deleting a line deletes the SP task, unless the same ID is still in another file, so moving a line between files keeps the task. Clearing a file of its last task works too.
+- Removing a file from the folder deletes its tasks in SP. Renaming a file in Obsidian keeps them. Turning the setting off does not delete anything.
+- If you change a task's parent in SP, an extra file keeps its old structure.
+- Hidden files and symlinks are skipped.
 
 ### Links
 
