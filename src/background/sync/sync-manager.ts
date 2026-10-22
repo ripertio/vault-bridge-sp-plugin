@@ -161,13 +161,13 @@ const unstampedTitlesOf = (content: string): string[] =>
  * Contents of the project's other files, by path. Null when one cannot be read: acting
  * on a partial view would treat that file's tasks as deleted, so the caller skips.
  */
-const readSiblings = async (session: SyncSession): Promise<Map<string, string> | null> => {
+const readSiblings = async (session: SyncSession, ofPath = session.config.filePath): Promise<Map<string, string> | null> => {
   const out = new Map<string, string>();
   for (const path of session.config.groupPaths ?? []) {
-    if (path === session.config.filePath) continue;
+    if (path === ofPath) continue;
     const content = await readTasksFile(path);
     if (content === null) {
-      log.log(`[vault-bridge] ${path} is not readable, skipping this sync of ${session.config.filePath}`);
+      log.log(`[vault-bridge] ${path} is not readable, skipping this sync of ${ofPath}`);
       return null;
     }
     out.set(path, content);
@@ -179,28 +179,53 @@ const readSiblings = async (session: SyncSession): Promise<Map<string, string> |
 const orderedContents = (session: SyncSession, own: string, siblings: Map<string, string>): string[] =>
   (session.config.groupPaths ?? []).map((p) => (p === session.config.filePath ? own : (siblings.get(p) ?? '')));
 
-/** File → SP. Reads the whole project's files when it has several. */
+/**
+ * True when a file of a multi-file project that held tasks at the last sync is now empty
+ * and stays empty for a second. That is the user deleting its last tasks. An empty file is
+ * otherwise never imported (an editor mid-save or a recreated template looks the same), so
+ * the wait guards against a transient truncation. The other files keep their tasks either way.
+ */
+const clearedOnPurpose = async (session: SyncSession, content: string | null): Promise<boolean> => {
+  if (!session.config.groupPaths || content === null || content.trim() !== '') return false;
+  if (session.lastSyncedContentHash === null || session.lastSyncedContentHash === hashContent(content)) return false;
+  await new Promise<void>((resolve) => setTimeout(resolve, 1000));
+  return (await readTasksFile(session.config.filePath)) === content;
+};
+
+/** SP → one file of the project. In a multi-file project only the main file takes new tasks. */
+const writeBackFile = async (session: SyncSession, path: string): Promise<void> => {
+  const paths = session.config.groupPaths;
+  const config = path === session.config.filePath ? session.config : { ...session.config, filePath: path };
+  if (!paths) return spToMd(config);
+  const siblings = await readSiblings(session, path);
+  if (!siblings) return;
+  const group: SpToMdGroup = {
+    otherFileIds: new Set([...siblings.values()].flatMap(taskIdsOf)),
+    otherFileTitles: [...siblings.values()].flatMap(unstampedTitlesOf),
+    appendNew: paths[0] === path,
+  };
+  return spToMd(config, group);
+};
+
+const writeBack = (session: SyncSession): Promise<void> => writeBackFile(session, session.config.filePath);
+
+/**
+ * File → SP. Reads the whole project's files when it has several. After a successful
+ * import every file of the project is written back, extra files first: a no-ID line in
+ * any of them became an SP task, and its ID must be stamped before the next import, or
+ * that import creates the task again.
+ */
 const importFile = async (session: SyncSession, content: string): Promise<MdToSpResult> => {
-  if (!session.config.groupPaths) return mdToSp(content, session.config.projectId);
+  const paths = session.config.groupPaths;
+  if (!paths) return mdToSp(content, session.config.projectId);
   const siblings = await readSiblings(session);
   // Same outcome as a malformed file: SP stays as is and nothing is written back.
   if (!siblings) return 'parse-error';
-  return mdToSp(orderedContents(session, content, siblings), session.config.projectId);
-};
-
-/** SP → file. In a multi-file project only the main file takes new tasks. */
-const writeBack = async (session: SyncSession): Promise<void> => {
-  if (!session.config.groupPaths) return spToMd(session.config);
-  const siblings = await readSiblings(session);
-  if (!siblings) return;
-  const otherFileIds = new Set([...siblings.values()].flatMap(taskIdsOf));
-  const otherFileTitles = [...siblings.values()].flatMap(unstampedTitlesOf);
-  const group: SpToMdGroup = {
-    otherFileIds,
-    otherFileTitles,
-    appendNew: session.config.groupPaths[0] === session.config.filePath,
-  };
-  return spToMd(session.config, group);
+  const result = await mdToSp(orderedContents(session, content, siblings), session.config.projectId);
+  if (result === 'ok') {
+    for (const path of [...paths.slice(1), paths[0]]) await writeBackFile(session, path);
+  }
+  return result;
 };
 
 const verifyFile = async (session: SyncSession): Promise<SyncVerificationResult> => {
@@ -688,11 +713,19 @@ const performInitialSyncUnlocked = async (session: SyncSession): Promise<void> =
       // is treated the same as a non-existent file: SP is the source of truth
       // and its tasks are written to the file. This prevents the dangerous case
       // where an empty (or whitespace-only) file causes all SP tasks to be deleted.
-      const hasTasks = content ? /^[ \t]*- \[[ x]\]/m.test(content) : false;
+      const CHECKBOX = /^[ \t]*- \[[ x]\]/m;
+      // In a multi-file project a task in any file counts: an empty task file next to
+      // files with tasks must import them, not be filled from SP (which would also
+      // bring back the tasks of a file that was just deleted).
+      let hasTasks = (content ? CHECKBOX.test(content) : false) || session.config.filesRemoved === true;
+      if (!hasTasks && session.config.groupPaths) {
+        const siblings = await readSiblings(session);
+        hasTasks = !!siblings && [...siblings.values()].some((c) => CHECKBOX.test(c));
+      }
       if (hasTasks) {
         // File has tasks — file is the source of truth. Import into SP, then
         // always write back so task IDs are stamped into the Markdown file.
-        const result = await importFile(session, content!);
+        const result = await importFile(session, content ?? '');
         if (result === 'parse-error') {
           // Malformed file at startup — leave it exactly as-is (no write-back
           // that would clobber it, no markSynced) and let the watcher retry on
@@ -764,8 +797,8 @@ const executeMdToSpSyncUnlocked = async (session: SyncSession): Promise<void> =>
     if (content === null && session.hasSyncedBefore) {
       // readTasksFile returns null on ENOENT — the file was deleted. Prompt.
       await handleMissingFile(session);
-    } else if (content) {
-      const result = await importFile(session, content);
+    } else if (content || (await clearedOnPurpose(session, content))) {
+      const result = await importFile(session, content ?? '');
       if (result === 'parse-error') {
         // The file is malformed. mdToSp left SP untouched; we must ALSO leave
         // the file untouched — a SP→MD write-back here would overwrite the
@@ -1089,8 +1122,11 @@ const handleSpChange = (session: SyncSession): void => {
 
       const content = await readTasksFile(session.config.filePath);
       const currentHash = content === null ? null : hashContent(content);
-      if (content && fileHasUnsyncedEdit(currentHash, session.lastSyncedContentHash)) {
-        const result = await importFile(session, content);
+      if (
+        (content || (await clearedOnPurpose(session, content))) &&
+        fileHasUnsyncedEdit(currentHash, session.lastSyncedContentHash)
+      ) {
+        const result = await importFile(session, content ?? '');
         // Malformed file — leave both the file and SP as-is (no SP→MD write-back
         // that would overwrite the edit). The watcher retries on the next edit.
         if (result === 'parse-error') return;
@@ -1170,8 +1206,8 @@ export const syncAllNow = (): void => {
 
       if (fileChangedSinceSync) {
         // MD → SP first: the pending file edit wins…
-        if (content) {
-          const result = await importFile(session, content);
+        if (content || (await clearedOnPurpose(session, content))) {
+          const result = await importFile(session, content ?? '');
           if (result === 'parse-error') {
             // Malformed file — leave it untouched (no SP→MD write-back that
             // would overwrite the edit) and abort this manual sync. `finally`

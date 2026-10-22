@@ -47,7 +47,17 @@ export const mdToSp = async (
     const parseResult = Array.isArray(markdownContent)
       ? parseMarkdownGroup(markdownContent)
       : parseMarkdownWithHeader(markdownContent);
-    const parsedTasks = parseResult.tasks;
+    // The same ID on lines of two files (a line copied rather than moved) is one task. The
+    // later lines are ignored, or each import would create the task again.
+    const seenIds = new Set<string>();
+    const parsedTasks = Array.isArray(markdownContent)
+      ? parseResult.tasks.filter((t) => {
+          if (!t.id) return true;
+          if (seenIds.has(t.id)) return false;
+          seenIds.add(t.id);
+          return true;
+        })
+      : parseResult.tasks;
 
     // Abort on any parse error, BEFORE touching SP. A parse error means we could
     // not fully understand the file, and reconciliation treats the parsed set as

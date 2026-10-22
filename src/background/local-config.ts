@@ -14,6 +14,10 @@ export interface SyncBindingCfg {
   // Every file synced with this project, main file first. Set only when the project folder
   // has more than one (see ProjectsDirCfg.syncAllFiles). The main file receives new tasks.
   groupPaths?: string[];
+  // Set for one start after a file left the project's folder. Then the files that remain
+  // are the whole truth, even when they are all empty, so the removed file's tasks are
+  // deleted in SP instead of being written back.
+  filesRemoved?: boolean;
 }
 
 export interface LocalUserCfgV2 {

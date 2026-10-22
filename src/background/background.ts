@@ -560,7 +560,25 @@ const runStartBindings = async (): Promise<void> => {
     log.log(`auto project sync: ${result.bindings.length} folder(s) matched`);
     result.bindings.forEach((b) => log.log(`  ↔ ${b.projectTitle} (${b.filePath})`));
   }
-  initSyncRegistry([...result.bindings, ...inbox], currentConfig._lastSynced ?? {});
+  // A file that synced before but is no longer in its folder was removed (or moved out).
+  // With every file synced that means its tasks are deleted, and the sync must not write
+  // them back into the task file. Turning the setting off is not a removal.
+  const lastSynced = currentConfig._lastSynced ?? {};
+  const liveIds = new Set(result.bindings.map((b) => b.id));
+  const goneIds = Object.keys(lastSynced).filter((id) => id.startsWith('auto-') && id.includes('::') && !liveIds.has(id));
+  let bindings = result.bindings;
+  if (goneIds.length > 0) {
+    if (projectsDir.enabled && projectsDir.syncAllFiles) {
+      const mains = new Set(goneIds.map((id) => id.split('::')[0]));
+      bindings = bindings.map((b) => (mains.has(b.id.split('::')[0]) ? { ...b, filesRemoved: true } : b));
+      log.log(`auto project sync: ${goneIds.length} file(s) left their folder`);
+    }
+    const next = { ...lastSynced };
+    goneIds.forEach((id) => delete next[id]);
+    currentConfig._lastSynced = next;
+    persistConfigSoon();
+  }
+  initSyncRegistry([...bindings, ...inbox], lastSynced);
 };
 
 const bindingsQueue = createSerialQueue();

@@ -122,11 +122,19 @@ export const spToMd = async (config: SyncBindingCfg, group?: SpToMdGroup): Promi
   if (existingContent) {
     // In-place merge: update task lines, leave everything else untouched
     const finalContent = mergeSpIntoExistingFile(existingContent, spTaskMap, orderedTasks, group);
-    await writeTasksFile(config.filePath, finalContent);
+    // A multi-file project writes all its files after each import; skip the unchanged ones.
+    if (!group || finalContent !== existingContent) await writeTasksFile(config.filePath, finalContent);
   } else {
     // File doesn't exist yet: generate from scratch
-    const markdown = convertTasksToMarkdown(orderedTasks);
-    await writeTasksFile(config.filePath, markdown);
+    // In a multi-file project only the main file starts with the tasks no other file holds.
+    const forThisFile = group
+      ? group.appendNew
+        ? orderedTasks.filter((t) => !(t.id && group.otherFileIds.has(t.id)))
+        : []
+      : orderedTasks;
+    const markdown = convertTasksToMarkdown(forThisFile);
+    // Leave a missing or empty extra file as it is.
+    if (!group || markdown !== '' || existingContent !== null) await writeTasksFile(config.filePath, markdown);
   }
 };
 
