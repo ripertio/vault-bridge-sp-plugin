@@ -172,6 +172,26 @@ describe('runDailyNoteDryRun', () => {
     expect(saveBaseline).toHaveBeenCalledWith({ p1: { isDone: false, title: 'Project task' } }, '2026-10-21');
   });
 
+  it('saves the baseline after a note tick that wrote nothing to the file', async () => {
+    mockedRead.mockResolvedValue('## To Dos\n- [x] <!--p1--> Project task\n');
+    const updateTask = jest.fn().mockResolvedValue(undefined);
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: ['p1'] }]),
+      getTasks: jest.fn().mockResolvedValue([{ id: 'p1', title: 'Project task', isDone: false, projectId: 'S3' }]),
+      updateTask,
+    };
+    const saveBaseline = jest.fn();
+    const withBaseline = {
+      getBaseline: () => ({ p1: { isDone: false, title: 'Project task' } }),
+      getBaselineDay: () => '2026-10-21',
+      saveBaseline,
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, withBaseline, NOW);
+    expect(updateTask).toHaveBeenCalledWith('p1', { isDone: true });
+    expect(mockedWrite).not.toHaveBeenCalled();
+    expect(saveBaseline).toHaveBeenCalledWith({ p1: { isDone: true, title: 'Project task' } }, '2026-10-21');
+  });
+
   it('does not save a baseline in dry-run', async () => {
     mockedRead.mockResolvedValue('## To Dos\n');
     setSp(['p1']);

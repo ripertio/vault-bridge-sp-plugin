@@ -49,13 +49,10 @@ export const runDailyNoteDryRun = async (
   // Symlinks are resolved too: a link inside the vault must not lead the note outside it.
   await assertRealPathInside(cfg.vaultPath, notePath);
 
-  const [tags, tasks] = await Promise.all([PluginAPI.getAllTags(), PluginAPI.getTasks()]);
+  const [tags, fetchedTasks] = await Promise.all([PluginAPI.getAllTags(), PluginAPI.getTasks()]);
   const plannedIds = new Set(plannedTaskIdsForToday(tags));
   const spIsDone: Record<string, boolean> = {};
-  for (const t of tasks) spIsDone[t.id] = t.isDone;
-  const planned: DailyPlanTask[] = tasks
-    .filter((t) => plannedIds.has(t.id))
-    .map((t) => ({ id: t.id, title: t.title, isDone: t.isDone, projectId: t.projectId }));
+  for (const t of fetchedTasks) spIsDone[t.id] = t.isDone;
 
   const content = await readTasksFile(notePath);
   if (content === null) {
@@ -79,6 +76,13 @@ export const runDailyNoteDryRun = async (
       await PluginAPI.updateTask(c.taskId, c.updates);
     }
   }
+  // SP now holds the reverse updates. The steps below must see them, or the forward plan
+  // would flip a checkbox the user just ticked back to SP's old state.
+  const reverseById = new Map(reverse.map((c) => [c.taskId, c.updates]));
+  const tasks = fetchedTasks.map((t) => ({ ...t, ...reverseById.get(t.id) }));
+  const planned: DailyPlanTask[] = tasks
+    .filter((t) => plannedIds.has(t.id))
+    .map((t) => ({ id: t.id, title: t.title, isDone: t.isDone, projectId: t.projectId }));
 
   // 1a) Delete: only when the user opted in. The same batch op the original
   // sync uses (applyBatch + a delete op), grouped per SP project.
@@ -188,31 +192,37 @@ export const runDailyNoteDryRun = async (
   const result = planDailyNote(cfg, working, [...planned, ...inBody]);
   result.logLines.forEach((line) => log.log(line));
 
-  const changes =
+  const fileChanges =
     result.missingTaskIds.length + result.statusChangedTaskIds.length + created.length + carriedCount + goneRemoved;
   if (cfg.dryRun) return;
-  if (changes === 0) {
+  // Reverse updates and SP deletes are already applied, so they count as changes too.
+  // Otherwise the baseline is not saved and the next run undoes them.
+  const spChanges = reverse.length + (cfg.deleteRemoved ? removedIds.length : 0);
+  if (fileChanges === 0 && spChanges === 0) {
     if (rolloverDue) deps.saveRolloverDay?.(today);
     return;
   }
 
-  // Re-read right before writing: if the user edited the note since the plan was
-  // computed, skip this write rather than overwrite their change.
-  const current = await readTasksFile(notePath);
-  if (current !== content) {
-    log.log('daily note changed during planning, skipping write');
-    return;
+  if (fileChanges > 0) {
+    // Re-read right before writing: if the user edited the note since the plan was
+    // computed, skip this write rather than overwrite their change.
+    const current = await readTasksFile(notePath);
+    if (current !== content) {
+      log.log('daily note changed during planning, skipping write');
+      return;
+    }
+    await writeTasksFile(notePath, result.nextLines.join('\n'));
+    if (carriedCount > 0) log.log(`rolled over ${carriedCount} overdue task(s)`);
+    if (created.length > 0) log.log(`created ${created.length} SP task(s) from the note`);
+    log.log(`daily note updated: +${result.missingTaskIds.length} task(s), ~${result.statusChangedTaskIds.length} checkbox(es)`);
   }
-  await writeTasksFile(notePath, result.nextLines.join('\n'));
   if (rolloverDue) deps.saveRolloverDay?.(today);
-  if (carriedCount > 0) log.log(`rolled over ${carriedCount} overdue task(s)`);
-  if (created.length > 0) log.log(`created ${created.length} SP task(s) from the note`);
-  log.log(`daily note updated: +${result.missingTaskIds.length} task(s), ~${result.statusChangedTaskIds.length} checkbox(es)`);
 
   // 3) Baseline = what the plugin now agrees with, for lines it owns.
   const next: DailyBaseline = { ...baselineForToday };
   // Every ID on a note line is owned by the plugin, including tasks created from
-  // the note (they live in the Inbox, so they are not in `planned`).
+  // the note (they live in the Inbox, so they are not in `planned`). `tasks` already
+  // includes the reverse updates.
   const byId = new Map<string, { id: string; title: string; isDone: boolean }>(
     [...tasks, ...createdTasks].map((t) => [t.id, t]),
   );

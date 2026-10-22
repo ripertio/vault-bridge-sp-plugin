@@ -5,7 +5,7 @@ Result of a `/code-review` run on 2026-10-22, branch `feature/obsidian-sync`. Te
 | # | Area | Location | Summary |
 | --- | --- | --- | --- |
 | 1 | Daily notes | `src/background/daily/daily-runner.ts:203` | SP tasks are created before the "changed during planning" guard, which then skips stamping their IDs |
-| 2 | Daily notes | `src/background/daily/daily-runner.ts:194` | Early return skips saving the baseline after reverse updates and deletes |
+| 2 | Daily notes | `src/background/daily/daily-runner.ts:194` | Early return skips saving the baseline after reverse updates and deletes (fixed) |
 | 3 | Startup | `src/background/background.ts:897` | An Inbox-only setup does not start syncing after a restart (fixed) |
 | 4 | Daily notes | `src/background/background.ts:1031` | Changing the vault path does not restart the daily-note watcher |
 | 5 | Daily notes | `src/background/daily/daily-runner.ts:112` | A task missing from `getTasks()` is treated as gone and its line is removed |
@@ -32,6 +32,8 @@ The startup run, the watcher's `notifyOnCreate`, `taskUpdate` and the day-change
 **Scenario.** The user ticks a task in the note. The reverse step sets SP `isDone=true`, but `changes` counts only forward changes, so it is 0 and the baseline stays `isDone=false`. Later the user unchecks the task in SP. `spIsDone` (false) equals the baseline (false) and the note (true) differs from it, so the reverse step sets the SP task back to done and reverts the user's action. Lines removed from the note because SP deleted the task also stay in the baseline and are deleted again on every run.
 
 **Direction.** Count reverse changes and deletions when deciding whether to save the baseline.
+
+**Fixed.** Reverse updates and deletes now count as changes, so the baseline is saved for them even when the note file is not written. The later steps also read SP state after the reverse updates. Before this, the forward plan flipped a checkbox the user had just ticked back to SP's old state. Tested in `src/background/daily/__tests__/daily-runner.test.ts`.
 
 ## 3. Inbox-only setup does not sync on startup
 
