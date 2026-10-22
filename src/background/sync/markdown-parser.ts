@@ -167,7 +167,7 @@ export const parseMarkdownWithErrors = (content: string): TaskParseResult => {
         if (taskId && seenIds.has(taskId)) {
           errors.push(`Duplicate task ID found: ${taskId} at line ${i + 1}`);
           console.warn(
-            `[sync-md] Found duplicate task ID: ${taskId} at line ${i + 1}, setting to null`,
+            `[vault-bridge] Found duplicate task ID: ${taskId} at line ${i + 1}, setting to null`,
           );
           // Set ID to null instead of skipping the task
           taskId = null;

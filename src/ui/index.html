@@ -208,7 +208,7 @@
         Vault Bridge <span id="pluginVersion">v__PLUGIN_VERSION__</span>
         <a id="updateLink" href="#" target="_blank" rel="noopener noreferrer" style="display:none">&middot; ⬆ Update available</a>
         &middot;
-        <a href="https://codeberg.org/fpindado/sync-md-multi" target="_blank" rel="noopener noreferrer">Git repository</a>
+        <a href="https://github.com/ripertio/vault-bridge-sp-plugin" target="_blank" rel="noopener noreferrer">Git repository</a>
       </footer>
     </div>
 
@@ -323,7 +323,7 @@
 
           renderUpdateIndicator();
         } catch (e) {
-          console.error('[sync-md] loadData error:', e);
+          console.error('[vault-bridge] loadData error:', e);
           showStatus('Error loading data: ' + (e.message || e), 'error');
         }
       }
@@ -945,11 +945,11 @@
                   }
                 }
               } catch (e) {
-                console.error('[sync-md] projectListUpdate handler error:', e);
+                console.error('[vault-bridge] projectListUpdate handler error:', e);
               }
             });
           } catch (e) {
-            console.warn('[sync-md] Could not register projectListUpdate hook in iframe:', e);
+            console.warn('[vault-bridge] Could not register projectListUpdate hook in iframe:', e);
           }
         }
       }

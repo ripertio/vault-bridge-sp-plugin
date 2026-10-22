@@ -109,9 +109,7 @@ If a bound file or project disappears, the plugin pauses that binding and opens 
 ```bash
 npm install
 npm test            # jest
-npm run lint
 npm run build       # bundles plugin.js, index.html, manifest and icon into dist/ and writes vault-bridge-v<version>.zip
-npm run watch       # rebuild on change
 ```
 
 Source layout and design notes are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -120,7 +118,6 @@ Source layout and design notes are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.m
 
 - Desktop only. The plugin needs Node execution.
 - Vault Bridge relies on a few SP APIs that are not in the public plugin types. They are listed in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#undocumented-sp-apis). A future SP release may change them.
-- The update notifier and the repository link in the config panel still point at the upstream project.
 
 ## Credits
 

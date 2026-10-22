@@ -142,7 +142,7 @@ Verify the file path in the binding is correct and that the app has filesystem r
 This usually means the `<!--id-->` comments were removed or corrupted. Restore them from a backup or delete the affected tasks in SP and let the next SP→Markdown sync regenerate the file cleanly.
 
 **Errors in the console**
-Open the developer console (`Ctrl+Shift+I` / `Cmd+Option+I`) and look for `[sync-md]` prefixed messages. Errors include the binding's file path to help identify which binding is affected.
+Open the developer console (`Ctrl+Shift+I` / `Cmd+Option+I`) and look for `[vault-bridge]` prefixed messages. Errors include the binding's file path to help identify which binding is affected.
 
 **SP→Markdown sync fires but produces no visible change**
 The 2-second cooldown after a Markdown→SP sync may be suppressing the write-back. This is intentional — wait a few seconds and trigger a task update in SP to force a fresh SP→Markdown sync.

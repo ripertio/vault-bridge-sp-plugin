@@ -1,21 +1,15 @@
 {
-  "name": "sync-md-multi",
+  "name": "vault-bridge",
   "version": "0.4.6",
   "description": "Two-way bridge between Super Productivity and an Obsidian vault: project folders, daily notes and the Inbox",
-  "author": "Fernando Pindado",
+  "author": "ripertio",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://codeberg.org/fpindado/sync-md-multi.git"
+    "url": "https://github.com/ripertio/vault-bridge-sp-plugin.git"
   },
   "scripts": {
-    "watch": "node scripts/watch.js",
     "build": "node scripts/build.js",
-    "deploy": "npm run build && node scripts/deploy.js",
-    "lint": "eslint src --ext .ts --max-warnings 0",
-    "lint:fix": "eslint src --ext .ts --fix",
-    "prettier": "prettier --write 'src/**/*.{ts,js,json}'",
-    "prettier:check": "prettier --check 'src/**/*.{ts,js,json}'",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"

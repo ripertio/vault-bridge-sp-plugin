@@ -16,11 +16,8 @@
 import { TextEncoder, TextDecoder } from 'util';
 // jsdom's URL machinery needs these globals, which jest's jsdom environment
 // does not expose by default — polyfill them before requiring jsdom.
-/* eslint-disable @typescript-eslint/no-explicit-any */
 if (!(global as any).TextEncoder) (global as any).TextEncoder = TextEncoder;
 if (!(global as any).TextDecoder) (global as any).TextDecoder = TextDecoder;
-/* eslint-enable @typescript-eslint/no-explicit-any */
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { JSDOM } = require('jsdom');
 import * as fs from 'fs';
 import * as path from 'path';

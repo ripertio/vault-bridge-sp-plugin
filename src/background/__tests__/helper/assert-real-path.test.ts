@@ -16,7 +16,7 @@ describe('assertRealPathInside', () => {
   let outside: string;
 
   beforeEach(() => {
-    base = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-md-realpath-'));
+    base = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-bridge-realpath-'));
     root = path.join(base, 'vault');
     outside = path.join(base, 'elsewhere');
     fs.mkdirSync(root);

@@ -67,11 +67,11 @@ export const dailyNoteRelativePath = (cfg: DailyNoteCfg, date: Date): string => 
   const folder = cfg.folder.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
   const filename = formatDailyFilename(cfg.filenameFormat, date);
   if (!filename || filename.includes('/') || filename.includes('..')) {
-    throw new Error('[sync-md] Invalid daily note filename format');
+    throw new Error('[vault-bridge] Invalid daily note filename format');
   }
   const segments = folder ? folder.split('/') : [];
   if (segments.some((s) => s === '..' || s === '.' || s === '')) {
-    throw new Error('[sync-md] Invalid daily note folder');
+    throw new Error('[vault-bridge] Invalid daily note folder');
   }
   return [...segments, `${filename}.md`].join('/');
 };
@@ -134,11 +134,11 @@ export const resolveDailyNoteCfg = (stored?: Partial<DailyNoteCfg> & { vaultRoot
 export const resolveInsideVault = (vaultPath: string, relative: string): string => {
   const root = vaultPath.replace(/\\/g, '/').replace(/\/+$/, '');
   if (!root.startsWith('/') && !/^[a-zA-Z]:\//.test(root)) {
-    throw new Error('[sync-md] Vault root must be an absolute path');
+    throw new Error('[vault-bridge] Vault root must be an absolute path');
   }
   const rel = relative.replace(/\\/g, '/');
   if (rel.startsWith('/') || rel.split('/').some((s) => s === '..')) {
-    throw new Error('[sync-md] Daily note path escapes the vault');
+    throw new Error('[vault-bridge] Daily note path escapes the vault');
   }
   return `${root}/${rel}`;
 };

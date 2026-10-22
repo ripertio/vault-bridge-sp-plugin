@@ -27,7 +27,7 @@ describe('device-local config store', () => {
     expect(loadLocalConfig()).toEqual({ version: 2, bindings: [] });
   });
 
-  it('round-trips through localStorage under the sync-md-multi key', () => {
+  it('round-trips through localStorage under the vault-bridge key', () => {
     const cfg: LocalUserCfgV2 = {
       version: 2,
       bindings: [{ id: 'b1', filePath: '/Users/me/tasks.md', projectId: 'p1', enabled: true }],
@@ -37,7 +37,7 @@ describe('device-local config store', () => {
 
     // Stored under our OWN key, distinct from the built-in sync.md's key so the
     // two plugins can never clobber each other.
-    expect(localStorage.getItem('sync-md-multi-config')).not.toBeNull();
+    expect(localStorage.getItem('vault-bridge-config')).not.toBeNull();
     expect(localStorage.getItem('sync-md-config')).toBeNull();
 
     expect(loadLocalConfig()).toEqual(cfg);
@@ -92,6 +92,29 @@ describe('device-local config store', () => {
       { id: 'default-binding', filePath: '/legacy/tasks.md', projectId: 'legacy-project', enabled: true },
     ]);
     // Migration is persisted back, so a reload returns V2 directly.
-    expect(JSON.parse(localStorage.getItem('sync-md-multi-config') as string).version).toBe(2);
+    expect(JSON.parse(localStorage.getItem('vault-bridge-config') as string).version).toBe(2);
+  });
+
+  it('moves the config from the sync-md-multi key, without its upstream update state', () => {
+    localStorage.setItem(
+      'sync-md-multi-config',
+      JSON.stringify({
+        version: 2,
+        bindings: [{ id: 'b1', filePath: '/a.md', projectId: 'p1', enabled: true }],
+        _latestVersion: '0.9.0',
+        _latestUrl: 'https://example.org/upstream',
+        _lastUpdateCheck: '2026-10-01T00:00:00.000Z',
+      }),
+    );
+
+    const expected = { version: 2, bindings: [{ id: 'b1', filePath: '/a.md', projectId: 'p1', enabled: true }] };
+    expect(loadLocalConfig()).toEqual(expected);
+    expect(JSON.parse(localStorage.getItem('vault-bridge-config') as string)).toEqual(expected);
+  });
+
+  it('prefers the vault-bridge key over the sync-md-multi key', () => {
+    localStorage.setItem('sync-md-multi-config', JSON.stringify({ version: 2, bindings: [{ id: 'old' }] }));
+    saveLocalConfig({ version: 2, bindings: [] });
+    expect(loadLocalConfig()).toEqual({ version: 2, bindings: [] });
   });
 });

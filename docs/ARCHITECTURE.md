@@ -8,7 +8,7 @@ Vault Bridge is a Super Productivity (SP) plugin. A background script (`plugin.j
 src/
 ├── manifest.json            plugin id, permissions, hooks
 ├── ui/index.html            config panel (Vault, Daily Notes, Projects, Links)
-├── shared/                  logger (`[sync-md]` prefix), shared types
+├── shared/                  logger (`[vault-bridge]` prefix), shared types
 └── background/
     ├── background.ts        entry point: wiring, hooks, menu, header button, config bridge
     ├── local-config.ts      device-local config (localStorage), migrations, panel merge
@@ -78,7 +78,7 @@ The reverse step compares the note with a **baseline**, the last state the plugi
 
 ## Device-local state
 
-Config lives in `localStorage` under `sync-md-multi-config`. It is not synced between devices, because it holds absolute paths. Besides the user settings it keeps:
+Config lives in `localStorage` under `vault-bridge-config`. A config saved under the old `sync-md-multi-config` key is moved there on first load. It is not synced between devices, because it holds absolute paths. Besides the user settings it keeps:
 
 | Field | Purpose |
 | --- | --- |
@@ -114,11 +114,9 @@ If an SP release changes any of these, the failure is likely to be an empty dail
 ## Build and test
 
 - `scripts/build.js` bundles `background.ts` with esbuild into `dist/plugin.js`, copies `index.html` with the version injected, and writes `vault-bridge-v<version>.zip`.
-- `scripts/watch.js` rebuilds on change. `scripts/deploy.js` copies `dist/` into a local SP checkout's bundled plugins.
 - Tests run with Jest and ts-jest against a mock of `PluginAPI` (`src/background/__tests__/plugin-api-mock.ts`). `performance-benchmarks.test.ts` guards sync speed.
 - `TEST_Obsidian_Vault/` is a scratch vault for manual testing and is git-ignored.
 
 ## Further reading
 
 - [markdown-format.md](markdown-format.md): task line syntax, binding behaviour, troubleshooting.
-- `Tech_Docs/`: architecture and bug-fix notes inherited from `sync-md-multi` (English and Spanish). They describe the original engine and do not cover the vault features.

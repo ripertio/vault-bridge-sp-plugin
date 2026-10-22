@@ -53,10 +53,10 @@ export const mdToSp = async (
     // SP untouched; the next sync retries once the file is valid.
     if (parseResult.errors && parseResult.errors.length > 0) {
       const errorMsg = `Found ${parseResult.errors.length} issue(s) in markdown:\n${parseResult.errors.slice(0, 3).join('\n')}`;
-      console.warn('[sync-md]', errorMsg);
+      console.warn('[vault-bridge]', errorMsg);
 
       PluginAPI.showSnack({
-        msg: `Sync.md: ${parseResult.errors.length} parsing issue(s) — import skipped to protect your tasks. Check console for details.`,
+        msg: `Vault Bridge: ${parseResult.errors.length} parsing issue(s) — import skipped to protect your tasks. Check console for details.`,
         type: 'WARNING',
       });
       return 'parse-error';
@@ -112,11 +112,11 @@ export const mdToSp = async (
     await applyBatch(projectId, deleteOps);
     return 'ok';
   } catch (error) {
-    console.error('[sync-md] Error in mdToSp:', error);
+    console.error('[vault-bridge] Error in mdToSp:', error);
 
     // Show user-friendly error notification
     PluginAPI.showSnack({
-      msg: `Sync.md: Failed to sync markdown to SP. ${error instanceof Error ? error.message : 'Unknown error'}`,
+      msg: `Vault Bridge: Failed to sync markdown to SP. ${error instanceof Error ? error.message : 'Unknown error'}`,
       type: 'ERROR',
     });
 

@@ -4,13 +4,14 @@ import type { PluginNodeScriptError } from '@super-productivity/plugin-api';
  * Self-update *notifier* (never an auto-updater — SP exposes no self-reinstall
  * API, so install stays manual).
  *
- * The latest release is read from the PUBLIC Codeberg API.
+ * The latest release is read from the PUBLIC GitHub API.
  *
  * Anonymous read of `releases/latest` returns HTTP 200 with `tag_name` /
- * `html_url` (verified) — no token needed.
+ * `html_url` — no token needed. A repo without releases (or a private one)
+ * answers 404, which counts as "couldn't check".
  */
 export const RELEASES_LATEST_URL =
-  'https://codeberg.org/api/v1/repos/fpindado/sync-md-multi/releases/latest';
+  'https://api.github.com/repos/ripertio/vault-bridge-sp-plugin/releases/latest';
 
 export interface UpdateInfo {
   /** Latest version, leading `v` stripped — e.g. "0.3.2". */
@@ -58,12 +59,12 @@ interface FetchResult {
 }
 
 /**
- * GET the latest release from Codeberg via a Node HTTPS request.
+ * GET the latest release from GitHub via a Node HTTPS request.
  *
  * The request runs through `executeNodeScript` (Node context, no CORS) rather
  * than an iframe `fetch()`, which the sandbox CSP blocks — same mechanism the
- * file watcher uses. A `User-Agent` header is sent because Codeberg sits behind
- * Cloudflare, which can 403 a header-less request.
+ * file watcher uses. A `User-Agent` header is sent because the GitHub API rejects
+ * requests without one.
  *
  * Any failure (no nodeExecution, non-200, timeout, parse error) resolves to
  * `null` — the caller treats "couldn't check" exactly like "no update", so a
@@ -79,7 +80,7 @@ export const fetchLatestRelease = async (): Promise<UpdateInfo | null> => {
         const https = require('https');
         return new Promise((resolve) => {
           const req = https.get(args[0], {
-            headers: { 'User-Agent': 'sync-md-multi', 'Accept': 'application/json' },
+            headers: { 'User-Agent': 'vault-bridge', 'Accept': 'application/json' },
             timeout: 8000,
           }, (res) => {
             if (res.statusCode !== 200) {
@@ -111,7 +112,7 @@ export const fetchLatestRelease = async (): Promise<UpdateInfo | null> => {
 
   const r = result.result as FetchResult;
   if (!result.success || !r?.success || !r.tagName) {
-    console.warn('[sync-md] update check failed:', r?.error ?? toErrorMessage(result.error));
+    console.warn('[vault-bridge] update check failed:', r?.error ?? toErrorMessage(result.error));
     return null;
   }
   return {

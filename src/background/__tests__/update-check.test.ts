@@ -61,13 +61,13 @@ describe('fetchLatestRelease / checkForUpdate', () => {
       result: {
         success: true,
         tagName: 'v0.3.2',
-        htmlUrl: 'https://codeberg.org/fpindado/sync-md-multi/releases/tag/v0.3.2',
+        htmlUrl: 'https://github.com/ripertio/vault-bridge-sp-plugin/releases/tag/v0.3.2',
       },
     }));
     const info = await fetchLatestRelease();
     expect(info).toEqual({
       latestVersion: '0.3.2',
-      htmlUrl: 'https://codeberg.org/fpindado/sync-md-multi/releases/tag/v0.3.2',
+      htmlUrl: 'https://github.com/ripertio/vault-bridge-sp-plugin/releases/tag/v0.3.2',
     });
   });
 
@@ -94,7 +94,7 @@ describe('fetchLatestRelease / checkForUpdate', () => {
         result: {
           success: true,
           tagName: tag,
-          htmlUrl: 'https://codeberg.org/fpindado/sync-md-multi/releases/latest',
+          htmlUrl: 'https://github.com/ripertio/vault-bridge-sp-plugin/releases/latest',
         },
       }));
 

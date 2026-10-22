@@ -75,7 +75,7 @@ export const showMissingFileDialog = async (
     // No dialog support — fall back to the least-destructive default so a broken
     // API can't leave the binding stuck. Recreate from SP is safe (data lives in
     // SP); it just skips the user's choice.
-    log.error('[sync-md] openDialog unavailable — recreating file from SP by default');
+    log.error('[vault-bridge] openDialog unavailable — recreating file from SP by default');
     await handlers.onRecreate();
     return;
   }
@@ -109,7 +109,7 @@ export const showMissingFileDialog = async (
       ],
     });
   } catch (err) {
-    log.error('[sync-md] showMissingFileDialog failed:', err);
+    log.error('[vault-bridge] showMissingFileDialog failed:', err);
     PluginAPI.showSnack({
       msg: `Vault Bridge: could not show the missing-file dialog for "${filePath}".`,
       type: 'ERROR',
@@ -153,7 +153,7 @@ export const showMissingProjectDialog = async (
   if (typeof api.openDialog !== 'function') {
     // No dialog support — least-destructive default: recreate if we can (the
     // `.md` survives, so restoring the project is safe), otherwise delete.
-    log.error('[sync-md] openDialog unavailable — resolving missing-project by default');
+    log.error('[vault-bridge] openDialog unavailable — resolving missing-project by default');
     if (canRecreate) await handlers.onRecreate();
     else await handlers.onDelete();
     return;
@@ -217,7 +217,7 @@ export const showMissingProjectDialog = async (
       buttons,
     });
   } catch (err) {
-    log.error('[sync-md] showMissingProjectDialog failed:', err);
+    log.error('[vault-bridge] showMissingProjectDialog failed:', err);
     PluginAPI.showSnack({
       msg: `Vault Bridge: could not show the missing-project dialog for "${filePath}".`,
       type: 'ERROR',

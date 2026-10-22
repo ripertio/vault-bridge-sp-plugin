@@ -75,17 +75,38 @@ export interface LocalUserCfgV1 {
 // paths / bindings from activating on another synced device (v0.4.0). The key is
 // deliberately DISTINCT from the built-in sync.md's own `'sync-md-config'` so the
 // two plugins never share or clobber each other's stored config.
-const LOCAL_STORAGE_KEY = 'sync-md-multi-config';
+const LOCAL_STORAGE_KEY = 'vault-bridge-config';
+// Key used before the plugin was renamed from sync-md-multi. Read once when the new
+// key is empty, so an existing install keeps its settings.
+const PREVIOUS_STORAGE_KEY = 'sync-md-multi-config';
+
+// The old config's update-check state came from the upstream release feed, so it
+// must not show an "update available" marker for this plugin.
+const fromPreviousKey = (raw: string): string => {
+  const parsed = JSON.parse(raw);
+  delete parsed._lastUpdateCheck;
+  delete parsed._latestVersion;
+  delete parsed._latestUrl;
+  return JSON.stringify(parsed);
+};
 
 export const loadLocalConfig = (): LocalUserCfgV2 => {
   try {
-    const savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+    let savedData = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (!savedData) {
+      const previous = localStorage.getItem(PREVIOUS_STORAGE_KEY);
+      if (previous) {
+        savedData = fromPreviousKey(previous);
+        localStorage.setItem(LOCAL_STORAGE_KEY, savedData);
+        console.log('[vault-bridge] Moved config from the sync-md-multi storage key');
+      }
+    }
     if (savedData) {
       const parsed = JSON.parse(savedData);
-      
+
       // Migration logic: V1 to V2
       if (!parsed.version || parsed.version === 1 || (!parsed.bindings && parsed.filePath)) {
-        console.log('[sync-md] Migrating legacy config to V2');
+        console.log('[vault-bridge] Migrating legacy config to V2');
         const legacy = parsed as LocalUserCfgV1;
         const migrated: LocalUserCfgV2 = {
           version: 2,
@@ -111,7 +132,7 @@ export const loadLocalConfig = (): LocalUserCfgV2 => {
       bindings: [],
     };
   } catch (error) {
-    console.error('[sync-md] Failed to load config:', error);
+    console.error('[vault-bridge] Failed to load config:', error);
     return {
       version: 2,
       bindings: [],
@@ -123,7 +144,7 @@ export const saveLocalConfig = (config: LocalUserCfgV2): void => {
   try {
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(config));
   } catch (error) {
-    console.error('[sync-md] Failed to save config:', error);
+    console.error('[vault-bridge] Failed to save config:', error);
   }
 };
 

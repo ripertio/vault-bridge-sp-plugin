@@ -51,16 +51,6 @@ import { showCreateFolderDialog } from './projects/create-folder-dialog';
 // Current plugin version, injected from manifest.json at build time (see build.js).
 declare const __PLUGIN_VERSION__: string;
 
-/** Parse config from the string returned by loadSyncedData, or return null. */
-const parseSyncedConfig = (raw: string | null): LocalUserCfgV2 | null => {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && Array.isArray(parsed.bindings)) return parsed as LocalUserCfgV2;
-  } catch { /* ignore */ }
-  return null;
-};
-
 // Tracks the last bindings JSON we applied, to detect real binding changes.
 let activeBindingsJson = '';
 
@@ -105,7 +95,7 @@ const refreshProjectsCache = async (): Promise<void> => {
     currentConfig._cachedProjects = cachedProjects;
     persistConfig();
   } catch (err) {
-    log.error('[sync-md] Failed to cache projects:', err);
+    log.error('[vault-bridge] Failed to cache projects:', err);
   }
 };
 
@@ -122,7 +112,7 @@ const persistConfigSoon = (): void => {
 
 // ── Self-update notifier ────────────────────────────────────────────────────
 // A *notifier*, never an auto-updater (SP exposes no self-reinstall API — install
-// stays manual). We check the public Codeberg release feed on every app startup
+// stays manual). We check the public GitHub release feed on every app startup
 // and then every 24 h while the app stays open, and when a newer version exists
 // surface it via a startup snack, a header button next to "Sync Now" that opens
 // the release page, and a marker in the config-panel footer (rendered by the
@@ -174,7 +164,7 @@ const registerUpgradeButton = (info: UpdateInfo): void => {
     });
   } catch (err) {
     upgradeButtonRegistered = false;
-    log.error('[sync-md] registerHeaderButton (upgrade) failed:', err);
+    log.error('[vault-bridge] registerHeaderButton (upgrade) failed:', err);
   }
 };
 
@@ -195,7 +185,7 @@ const surfaceUpdate = (info: UpdateInfo, isStartup: boolean): void => {
         ico: 'upgrade',
       });
     } catch (err) {
-      log.error('[sync-md] update snack failed:', err);
+      log.error('[vault-bridge] update snack failed:', err);
     }
   }
 };
@@ -242,7 +232,7 @@ const maybeCheckForUpdate = async (isStartup = false): Promise<void> => {
     }
     persistConfigSoon();
   } catch (err) {
-    log.error('[sync-md] update check error:', err);
+    log.error('[vault-bridge] update check error:', err);
   }
 };
 
@@ -671,11 +661,11 @@ const applyConfigFromUi = (incoming: LocalUserCfgV2): void => {
     persistConfig();
     if (bindingsChanged) {
       activeBindingsJson = newBindingsJson;
-      log.log('[sync-md] Config saved from UI — restarting sync registry');
+      log.log('[vault-bridge] Config saved from UI — restarting sync registry');
       void startBindings();
     }
   } catch (err) {
-    log.error('[sync-md] Failed to apply config from UI:', err);
+    log.error('[vault-bridge] Failed to apply config from UI:', err);
   }
 };
 
@@ -722,7 +712,7 @@ const dailyDeps = () => ({
       },
     });
   } catch (err) {
-    log.error('[sync-md] registerMenuEntry failed:', err);
+    log.error('[vault-bridge] registerMenuEntry failed:', err);
   }
 
   try {
@@ -735,7 +725,7 @@ const dailyDeps = () => ({
       },
     });
   } catch (err) {
-    log.error('[sync-md] registerHeaderButton failed:', err);
+    log.error('[vault-bridge] registerHeaderButton failed:', err);
   }
 
   // ── Config bridge (sync layer → config owner) ────────────────────────────
@@ -814,53 +804,10 @@ const dailyDeps = () => ({
     });
   }
 
-  // ── Initial load (device-local, v0.4.0) ──────────────────────────────────────
-  // Config now lives in the background's OWN localStorage (device-local, NOT synced
-  // across devices — see local-config.ts). Load it synchronously, then run a
-  // MIGRATION from the pre-0.4.0 cross-device synced blob: earlier versions
-  // persisted the whole config via persistDataSynced, which SP syncs across
-  // devices — the very hazard v0.4.0 removes. On each startup, if that blob still
-  // holds config and we have nothing locally yet, seed localStorage from it; then
-  // clear the synced blob so it stops circulating through SP sync. For a single
-  // device this is just a one-time re-seed of its own config.
-  //
-  // KEEP THIS BLOCK FOR SEVERAL RELEASES — do NOT remove it as long as any user
-  // could still be upgrading from a pre-0.4.0 install (a user may jump 0.3.x →
-  // 0.6.x directly, and their config would only exist in the synced blob). It is
-  // cheap and idempotent: once the blob is cleared, loadSyncedData() returns
-  // nothing and this becomes a no-op every startup. Only drop it once we are
-  // confident essentially no pre-0.4.0 install remains (tentatively ~v0.8.0+),
-  // and drop the persistDataSynced/loadSyncedData manifest permissions with it.
+  // ── Initial load ─────────────────────────────────────────────────────────────
+  // Config lives in the background's OWN localStorage (device-local, NOT synced
+  // across devices — see local-config.ts).
   currentConfig = loadLocalConfig();
-  try {
-    const legacyRaw = await PluginAPI.loadSyncedData();
-    const legacy = parseSyncedConfig(legacyRaw);
-    if (legacy && Array.isArray(legacy.bindings) && legacy.bindings.length > 0) {
-      // Conservative: only seed when we have no local config yet, so a device that
-      // already configured its own bindings is never overwritten by a foreign blob.
-      if (currentConfig.bindings.length === 0) {
-        currentConfig = {
-          version: 2,
-          bindings: legacy.bindings,
-          _lastSynced: legacy._lastSynced ?? {},
-          _cachedProjects: legacy._cachedProjects,
-          _lastUpdateCheck: legacy._lastUpdateCheck,
-          _latestVersion: legacy._latestVersion,
-          _latestUrl: legacy._latestUrl,
-        };
-        persistConfig();
-        log.log('[sync-md] Migrated config from synced storage to local storage');
-      }
-      // Clear the legacy synced blob so it stops propagating across devices.
-      try {
-        await PluginAPI.persistDataSynced('');
-      } catch (err) {
-        log.error('[sync-md] Failed to clear legacy synced config:', err);
-      }
-    }
-  } catch {
-    /* no legacy synced data (or API unavailable) — nothing to migrate */
-  }
 
   // Daily notes: dry-run only, and only when the user has enabled it.
   startDailyNoteWatcher(() => dailyCfg(), dailyDeps(), watchDailyNote);
@@ -1035,7 +982,7 @@ const dailyDeps = () => ({
       return { success: false, error: 'unknown message type' };
     });
   } else {
-    log.error('[sync-md] onMessage unavailable — config panel cannot load/save');
+    log.error('[vault-bridge] onMessage unavailable — config panel cannot load/save');
   }
 
   // NOTE (v0.4.0): there is no more persistedDataChanged hook or 5 s config poll.
@@ -1071,10 +1018,10 @@ const dailyDeps = () => ({
       stopDailyNoteWatcher();
       stopDayChangeCheck();
       shutdownSyncRegistry();
-      log.log('[sync-md] onUnload: timers + sessions torn down');
+      log.log('[vault-bridge] onUnload: timers + sessions torn down');
     });
   } else {
-    log.error('[sync-md] onUnload not available — reloads may leave zombie timers');
+    log.error('[vault-bridge] onUnload not available — reloads may leave zombie timers');
   }
 
   // projectListUpdate: fired when the user adds, renames, or removes a project.
@@ -1103,7 +1050,7 @@ const dailyDeps = () => ({
 
   // ── Project list cache (non-critical → fire-and-forget) ───────────────────
   // Only populates the iframe dropdown; must NOT block the detection wiring
-  // above (a slow getAllProjects()/persistDataSynced() must not delay it).
+  // above (a slow getAllProjects() must not delay it).
   void refreshProjectsCache();
 
   // ── Self-update check (non-critical → fire-and-forget) ────────────────────

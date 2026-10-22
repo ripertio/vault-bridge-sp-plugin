@@ -12,7 +12,7 @@ const MANIFEST = JSON.parse(fs.readFileSync(path.join(SRC_DIR, 'manifest.json'),
 const VERSION = MANIFEST.version;
 
 async function buildPlugin() {
-  console.log('Building sync-md plugin with esbuild...');
+  console.log('Building Vault Bridge with esbuild...');
 
   // Clean dist directory
   if (fs.existsSync(DIST_DIR)) {
@@ -30,7 +30,7 @@ async function buildPlugin() {
       platform: 'browser',
       target: 'es2020',
       format: 'iife',
-      globalName: 'SyncMdPlugin',
+      globalName: 'VaultBridgePlugin',
       define: {
         'process.env.NODE_ENV': '"production"',
         // Inject the manifest version into the background bundle too (the config
@@ -39,7 +39,7 @@ async function buildPlugin() {
         __PLUGIN_VERSION__: JSON.stringify(VERSION),
       },
       banner: {
-        js: `// sync-md plugin v${VERSION}\n// This file is auto-generated. Do not edit directly.`,
+        js: `// Vault Bridge v${VERSION}\n// This file is auto-generated. Do not edit directly.`,
       },
       external: ['fs', 'path', 'child_process', '@super-productivity/plugin-api'],
       logLevel: 'info',
@@ -62,7 +62,7 @@ async function buildPlugin() {
       path.join(DIST_DIR, 'manifest.json'),
     );
 
-    // Copy or create icon.svg (icon_2.svg is the active icon; icon_1.svg is the fallback)
+    // Copy or create icon.svg
     console.log('Copying icon.svg...');
     const iconPath = path.join(SRC_DIR, 'assets', 'icon_2.svg');
     if (fs.existsSync(iconPath)) {

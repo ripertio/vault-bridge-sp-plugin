@@ -114,7 +114,7 @@ export const generateTaskOperations = (
       if (firstOccurrence.has(checkId)) {
         duplicateIds.add(checkId);
         console.warn(
-          `[sync-md] Duplicate task ID found: ${checkId} at line ${mdTask.line} (first occurrence at line ${firstOccurrence.get(checkId)})`,
+          `[vault-bridge] Duplicate task ID found: ${checkId} at line ${mdTask.line} (first occurrence at line ${firstOccurrence.get(checkId)})`,
         );
       } else {
         firstOccurrence.set(checkId, mdTask.line);
@@ -162,7 +162,7 @@ export const generateTaskOperations = (
 
     if (!validParentIds.has(mdTask.parentId)) {
       console.warn(
-        `[sync-md] Orphaned subtask detected: "${mdTask.title}" (line ${mdTask.line}) ` +
+        `[vault-bridge] Orphaned subtask detected: "${mdTask.title}" (line ${mdTask.line}) ` +
           `references non-existent parent "${mdTask.parentId}". Converting to root task.`,
       );
       return null;
@@ -512,13 +512,13 @@ export const generateTaskOperations = (
   const validation = validateOperations(operations, mdTasks, spTasks);
 
   if (validation.warnings.length > 0) {
-    console.warn('[sync-md] Operation warnings:');
+    console.warn('[vault-bridge] Operation warnings:');
     validation.warnings.forEach((warn) => console.warn(`  - ${warn}`));
   }
 
   let safeOperations = operations;
   if (!validation.isValid) {
-    console.error('[sync-md] Invalid operations detected — filtering them out:');
+    console.error('[vault-bridge] Invalid operations detected — filtering them out:');
     validation.errors.forEach((err) => console.error(`  - ${err}`));
 
     // Extract the indices of invalid operations from the error messages

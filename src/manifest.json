@@ -1,14 +1,14 @@
 {
-  "id": "sync-md-multi",
+  "id": "vault-bridge",
   "manifestVersion": 1,
   "name": "Vault Bridge",
   "version": "0.4.6",
   "description": "Two-way bridge between Super Productivity and an Obsidian vault: project folders, daily notes and the Inbox",
-  "author": "Fernando Pindado",
-  "homepage": "https://codeberg.org/fpindado/sync-md-multi",
+  "author": "ripertio",
+  "homepage": "https://github.com/ripertio/vault-bridge-sp-plugin",
   "repository": {
     "type": "git",
-    "url": "https://codeberg.org/fpindado/sync-md-multi.git"
+    "url": "https://github.com/ripertio/vault-bridge-sp-plugin.git"
   },
   "minSupVersion": "10.0.0",
   "permissions": [
@@ -20,8 +20,6 @@
     "addProject",
     "deleteProject",
     "nodeExecution",
-    "persistDataSynced",
-    "loadSyncedData",
     "reorderTasks",
     "registerHook",
     "showSnack",

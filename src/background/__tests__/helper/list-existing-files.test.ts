@@ -14,7 +14,7 @@ describe('listExistingFiles', () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'sync-md-files-'));
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'vault-bridge-files-'));
     fs.mkdirSync(path.join(dir, 'Inbox'));
     fs.writeFileSync(path.join(dir, 'Inbox', 'backlog.md'), '- [ ] a\n');
     fs.mkdirSync(path.join(dir, 'Folder'));

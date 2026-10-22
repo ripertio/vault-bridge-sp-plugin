@@ -113,7 +113,6 @@ declare module '@super-productivity/plugin-api' {
     /** Called when the application window gains or loses focus. */
     onWindowFocusChange?: (fn: (isFocused: boolean) => void) => void;
     /** Register a handler for messages sent from the plugin's UI frame. */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     onMessage?: (fn: (message: any) => any) => void;
     /** Execute a batch of task operations atomically within a single project. */
     batchUpdateForProject?: (params: {
@@ -142,7 +141,6 @@ declare module '@super-productivity/plugin-api' {
 // ─── Global ───────────────────────────────────────────────────────────────────
 
 declare global {
-  // eslint-disable-next-line no-var
   var PluginAPI: PublishedPluginAPI;
 }
 
