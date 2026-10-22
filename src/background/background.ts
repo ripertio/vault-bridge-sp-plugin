@@ -274,7 +274,7 @@ const startBindings = async (): Promise<void> => {
         currentConfig = { ...currentConfig, _projectLinks: nextLinks };
         persistConfig();
       }
-      await runProjectsReconcile(planReconcile(match), absDir, dailyCfg().dryRun, {
+      await runProjectsReconcile(planReconcile(match), absDir, projectsDir.taskFileName, dailyCfg().dryRun, {
         createProject: createSpProject,
         writeBacklog: async (binding) => {
           await spToMd(binding);
@@ -371,7 +371,7 @@ const handleCreateLinkSide = async (message: any): Promise<{ success: boolean; e
       const projectId = String(message.projectId ?? '');
       const project = (await PluginAPI.getAllProjects()).find((p) => p.id === projectId);
       if (!project) return { success: false, error: 'SP project not found.' };
-      await spToMd({ id: `create-${projectId}`, filePath: `${absDir}/${name}/backlog.md`, projectId, enabled: true, projectTitle: name });
+      await spToMd({ id: `create-${projectId}`, filePath: `${absDir}/${name}/${dirCfg.taskFileName}`, projectId, enabled: true, projectTitle: name });
     }
     void startBindings();
     return { success: true, created: true };
@@ -678,7 +678,7 @@ const dailyDeps = () => ({
           title: side === 'project' ? 'Create SP project?' : 'Create folder?',
           htmlContent:
             `<p>Create the ${side} <strong>${escapeHtmlText(name)}</strong>` +
-            (side === 'folder' ? ' with a backlog.md' : ' in Super Productivity') + '?</p>',
+            (side === 'folder' ? ' with a task file' : ' in Super Productivity') + '?</p>',
           buttons: [
             { label: 'Create', color: 'primary', onClick: () => { confirmed = true; } },
             { label: 'Cancel' },
@@ -794,7 +794,7 @@ const dailyDeps = () => ({
   // Refresh the cache so the fallback path in loadProjects() has up-to-date data.
   PluginAPI.registerHook('projectListUpdate' as any, () => {
     void refreshProjectsCache();
-    // Auto mode: a new SP project should get its folder + backlog.md without a restart.
+    // Auto mode: a new SP project should get its folder + task file without a restart.
     if (resolveProjectsDirCfg(currentConfig.projectsDir).enabled) scheduleProjectsSync();
   });
 

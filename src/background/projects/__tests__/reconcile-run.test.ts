@@ -18,7 +18,7 @@ const deps = () => ({
 describe('runProjectsReconcile', () => {
   it('creates a project for a folder and a folder + backlog for a project (write mode)', async () => {
     const d = deps();
-    const n = await runProjectsReconcile(plan, '/vault/Projects', false, d);
+    const n = await runProjectsReconcile(plan, '/vault/Projects', 'backlog.md', false, d);
     expect(d.createProject).toHaveBeenCalledWith('New folder');
     expect(d.writeBacklog).toHaveBeenCalledWith({
       id: 'auto-p1',
@@ -30,9 +30,15 @@ describe('runProjectsReconcile', () => {
     expect(n).toBe(2);
   });
 
+  it('uses the configured task file name for the new folder binding', async () => {
+    const d = deps();
+    await runProjectsReconcile(plan, '/vault/Projects', 'tasks.md', false, d);
+    expect(d.writeBacklog).toHaveBeenCalledWith(expect.objectContaining({ filePath: '/vault/Projects/Beta/tasks.md' }));
+  });
+
   it('changes nothing in dry-run', async () => {
     const d = deps();
-    const n = await runProjectsReconcile(plan, '/vault/Projects', true, d);
+    const n = await runProjectsReconcile(plan, '/vault/Projects', 'backlog.md', true, d);
     expect(d.createProject).not.toHaveBeenCalled();
     expect(d.writeBacklog).not.toHaveBeenCalled();
     expect(n).toBe(0);
@@ -41,14 +47,14 @@ describe('runProjectsReconcile', () => {
   it('keeps going when one item fails', async () => {
     const d = deps();
     d.createProject.mockRejectedValueOnce(new Error('boom'));
-    const n = await runProjectsReconcile(plan, '/vault/Projects', false, d);
+    const n = await runProjectsReconcile(plan, '/vault/Projects', 'backlog.md', false, d);
     expect(d.writeBacklog).toHaveBeenCalledTimes(1);
     expect(n).toBe(1);
   });
 
   it('never removes anything (only create callbacks are used)', async () => {
     const d = deps();
-    await runProjectsReconcile(plan, '/vault/Projects', false, d);
+    await runProjectsReconcile(plan, '/vault/Projects', 'backlog.md', false, d);
     expect(Object.keys(d).sort()).toEqual(['createProject', 'writeBacklog']);
   });
 });

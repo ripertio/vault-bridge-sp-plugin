@@ -34,6 +34,18 @@ describe('bindingsFromMatches', () => {
   });
 });
 
+describe('bindingsFromMatches with a custom task file name', () => {
+  it('points each matched folder at the configured file name', () => {
+    const [b] = bindingsFromMatches(
+      { matched: [{ folder: 'Alpha', projectId: 'p1' }], foldersWithoutProject: [], projectsWithoutFolder: [], ambiguous: [] },
+      '/vault/Projects',
+      {},
+      'tasks.md',
+    );
+    expect(b.filePath).toBe('/vault/Projects/Alpha/tasks.md');
+  });
+});
+
 describe('bindingsFromMatches with manual binds', () => {
   it('uses a bound markdown file as-is instead of appending backlog.md', () => {
     const [b] = bindingsFromMatches(

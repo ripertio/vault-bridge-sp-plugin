@@ -11,14 +11,14 @@ const P = (id: string, title: string) => ({ id, title });
 
 describe('validateProjectsDirCfg', () => {
   it('defaults to OFF with the Projects folder', () => {
-    expect(DEFAULT_PROJECTS_DIR_CFG).toMatchObject({ enabled: false, projectsDir: 'Projects' });
+    expect(DEFAULT_PROJECTS_DIR_CFG).toMatchObject({ enabled: false, projectsDir: 'Projects', taskFileName: 'backlog.md' });
   });
 
   it('accepts a relative folder and trims excluded names', () => {
     const r = validateProjectsDirCfg({ projectsDir: 'Projects/', excluded: [' Old ', 'Old', ''] });
     expect(r).toEqual({
       ok: true,
-      cfg: { enabled: false, projectsDir: 'Projects', excluded: ['Old'], folderBinds: {} },
+      cfg: { enabled: false, projectsDir: 'Projects', excluded: ['Old'], folderBinds: {}, taskFileName: 'backlog.md' },
     });
   });
 
@@ -35,6 +35,24 @@ describe('validateProjectsDirCfg', () => {
 
   it('requires a projects folder', () => {
     expect(validateProjectsDirCfg({ projectsDir: '  ' }).ok).toBe(false);
+  });
+
+  it('trims the task file name and keeps a custom one', () => {
+    const r = validateProjectsDirCfg({ taskFileName: '  tasks.md ' });
+    expect(r.ok && r.cfg.taskFileName).toBe('tasks.md');
+  });
+
+  it('rejects an empty task file name', () => {
+    expect(validateProjectsDirCfg({ taskFileName: '  ' })).toEqual({
+      ok: false,
+      error: 'Task file name is required.',
+    });
+  });
+
+  it('rejects a task file name that is not a markdown file or has folders', () => {
+    for (const bad of ['tasks.txt', 'sub/tasks.md', '../tasks.md', '..', 'tasks']) {
+      expect(validateProjectsDirCfg({ taskFileName: bad }).ok).toBe(false);
+    }
   });
 
   it('resolves missing fields over defaults', () => {

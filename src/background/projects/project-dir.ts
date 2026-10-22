@@ -10,6 +10,8 @@ export interface ProjectsDirCfg {
   // Manual links: folder path (relative to projectsDir, e.g. "Inbox/backlog.md") →
   // SP project ID. A manual link wins over the title match.
   folderBinds?: Record<string, string>;
+  // Markdown file name created in each project folder and synced with its SP project.
+  taskFileName: string;
 }
 
 export const DEFAULT_PROJECTS_DIR_CFG: ProjectsDirCfg = {
@@ -17,6 +19,7 @@ export const DEFAULT_PROJECTS_DIR_CFG: ProjectsDirCfg = {
   projectsDir: 'Projects',
   excluded: [],
   folderBinds: {},
+  taskFileName: 'backlog.md',
 };
 
 export type ProjectsDirValidation =
@@ -44,7 +47,12 @@ export const validateProjectsDirCfg = (input: Partial<ProjectsDirCfg>): Projects
     return { ok: false, error: 'Projects folder must stay inside the vault.' };
   }
   const excluded = [...new Set((cfg.excluded ?? []).map((e) => e.trim()).filter((e) => e.length > 0))];
-  return { ok: true, cfg: { ...cfg, projectsDir, excluded } };
+  const taskFileName = (cfg.taskFileName ?? '').trim();
+  if (!taskFileName) return { ok: false, error: 'Task file name is required.' };
+  if (!validFolderName(taskFileName) || !/\.md$/i.test(taskFileName)) {
+    return { ok: false, error: 'Task file name must be a .md file name without folders.' };
+  }
+  return { ok: true, cfg: { ...cfg, projectsDir, excluded, taskFileName } };
 };
 
 export interface ProjectRef {
@@ -57,7 +65,7 @@ export interface FolderMatchResult {
   matched: { folder: string; projectId: string }[];
   // Folders with no SP project of the same title (candidates for creating a project).
   foldersWithoutProject: string[];
-  // SP projects with no folder (candidates for creating a folder with backlog.md).
+  // SP projects with no folder (candidates for creating a folder with a task file).
   projectsWithoutFolder: ProjectRef[];
   // Names that match more than one SP project. Never synced automatically.
   ambiguous: string[];

@@ -155,6 +155,11 @@
             </div>
           </div>
           <div class="form-group">
+            <label for="taskFileName">Task file name (created in each project folder)</label>
+            <input type="text" id="taskFileName" placeholder="backlog.md" />
+            <p class="file-hint">Changing this points existing folders at the new name. Rename the files in the vault to match.</p>
+          </div>
+          <div class="form-group">
             <label for="projectsExcluded">Excluded (one name per line, folder or project title)</label>
             <textarea id="projectsExcluded" rows="4" placeholder="Old project"></textarea>
           </div>
@@ -695,6 +700,7 @@
       function loadProjectsForm(p) {
         document.getElementById('projectsAuto').checked = !!p.enabled;
         document.getElementById('projectsDir').value = p.projectsDir ?? 'Projects';
+        document.getElementById('taskFileName').value = p.taskFileName ?? 'backlog.md';
         document.getElementById('projectsExcluded').value = (p.excluded || []).join('\n');
       }
 
@@ -714,6 +720,7 @@
         const projectsDir = {
           enabled: document.getElementById('projectsAuto').checked,
           projectsDir: document.getElementById('projectsDir').value.trim(),
+          taskFileName: document.getElementById('taskFileName').value.trim(),
           excluded: document.getElementById('projectsExcluded').value.split('\n'),
         };
         try {

@@ -29,7 +29,7 @@ export const computeEffectiveBindings = async (
     const [folders, projects] = await Promise.all([deps.listFolders(absDir), deps.getProjects()]);
     const match = matchFoldersToProjects(folders, projects, projectsDir.excluded, projectsDir.folderBinds ?? {});
     const titles = Object.fromEntries(projects.map((p) => [p.id, p.title]));
-    return { ok: true, bindings: bindingsFromMatches(match, absDir, titles) };
+    return { ok: true, bindings: bindingsFromMatches(match, absDir, titles, projectsDir.taskFileName) };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : String(err) };
   }
