@@ -167,6 +167,10 @@
             <p class="file-hint">Off: a deleted folder is created again on the next sync. On: nothing is removed without your answer.</p>
           </div>
           <div class="form-group">
+            <label><input type="checkbox" id="projectsRespectIgnore" /> Leave tasks tagged #ignore out of the sync (both ways)</label>
+            <p class="file-hint">Off: the tag has no effect. On: a task with #ignore is not created, updated or deleted on either side.</p>
+          </div>
+          <div class="form-group">
             <label><input type="checkbox" id="projectsExcludeRemoved" /> When a project is removed in Super Productivity, add its folder name to the excluded list</label>
             <p class="file-hint">Off: the folder is offered again as a new project. On: the folder is left out of sync from then on.</p>
           </div>
@@ -716,6 +720,7 @@
         document.getElementById('taskFileName').value = p.taskFileName ?? 'backlog.md';
         document.getElementById('projectsConfirmDelete').checked = !!p.confirmFolderDelete;
         document.getElementById('projectsExcludeRemoved').checked = !!p.excludeRemovedProjects;
+        document.getElementById('projectsRespectIgnore').checked = !!p.respectIgnoreTag;
         document.getElementById('projectsExcluded').value = (p.excluded || []).join('\n');
       }
 
@@ -738,6 +743,7 @@
           taskFileName: document.getElementById('taskFileName').value.trim(),
           confirmFolderDelete: document.getElementById('projectsConfirmDelete').checked,
           excludeRemovedProjects: document.getElementById('projectsExcludeRemoved').checked,
+          respectIgnoreTag: document.getElementById('projectsRespectIgnore').checked,
           excluded: document.getElementById('projectsExcluded').value.split('\n'),
         };
         try {

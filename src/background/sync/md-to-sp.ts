@@ -1,4 +1,5 @@
 import { parseMarkdownWithHeader } from './markdown-parser';
+import { withoutIgnored } from './ignore-tag';
 import { generateTaskOperations } from './generate-task-operations';
 // import { Task } from '@super-productivity/plugin-api';
 
@@ -73,7 +74,9 @@ export const mdToSp = async (
     const projectTasks = currentTasks.filter((task) => task.projectId === projectId);
 
     // Generate operations with validation
-    const operations = generateTaskOperations(parsedTasks, projectTasks, projectId);
+    // Tasks tagged #ignore (and their children) are left out on both sides (ignore-tag.ts).
+    const sync = withoutIgnored(parsedTasks, projectTasks);
+    const operations = generateTaskOperations(sync.parsed, sync.spTasks, projectId);
 
     // Execute in two ordered phases so a deleted parent never cascades onto a
     // promoted child. SP's batch reducer resolves a `delete` against the

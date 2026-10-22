@@ -18,6 +18,9 @@ export interface ProjectsDirCfg {
   // Off by default. When on, a project removed in SP adds its folder name to the
   // excluded list, so the folder is not offered for a new project again.
   excludeRemovedProjects: boolean;
+  // Off by default. When on, a task tagged #ignore (in SP or in its Markdown line) is left
+  // out of the sync in both directions.
+  respectIgnoreTag: boolean;
 }
 
 export const DEFAULT_PROJECTS_DIR_CFG: ProjectsDirCfg = {
@@ -28,6 +31,7 @@ export const DEFAULT_PROJECTS_DIR_CFG: ProjectsDirCfg = {
   taskFileName: 'backlog.md',
   confirmFolderDelete: false,
   excludeRemovedProjects: false,
+  respectIgnoreTag: false,
 };
 
 export type ProjectsDirValidation =

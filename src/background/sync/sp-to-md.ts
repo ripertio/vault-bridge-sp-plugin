@@ -1,6 +1,7 @@
 import type { Task } from '@super-productivity/plugin-api';
 import { writeTasksFile, readTasksFile } from '../helper/file-utils';
 import { stripStatusTags } from './markdown-parser';
+import { ignoredIdsInMarkdown, isIgnoredTitle } from './ignore-tag';
 import { SyncBindingCfg } from '../local-config';
 
 /** Regex that matches a markdown task checkbox line (with optional leading indent). */
@@ -74,8 +75,16 @@ export const spToMd = async (config: SyncBindingCfg): Promise<void> => {
   const projects = await PluginAPI.getAllProjects();
   const project = projects.find((p) => p.id === config.projectId);
 
-  // Filter tasks for this project
-  const projectTasks = allTasks.filter((task) => task.projectId === config.projectId);
+  // Tasks tagged #ignore (in SP, or on their Markdown line) are left out. Their lines are
+  // kept exactly as they are, so they are never removed or rewritten here (see ignore-tag.ts).
+  const existingContent = await readTasksFile(config.filePath);
+  const keepIds = ignoredIdsInMarkdown(existingContent ?? '');
+  allTasks
+    .filter((task) => task.projectId === config.projectId && isIgnoredTitle(task.title))
+    .forEach((task) => keepIds.add(task.id));
+  const projectTasks = allTasks.filter(
+    (task) => task.projectId === config.projectId && !keepIds.has(task.id),
+  );
 
   // If project has taskIds, use them to order the parent tasks
   let orderedTasks = projectTasks;
@@ -103,12 +112,9 @@ export const spToMd = async (config: SyncBindingCfg): Promise<void> => {
     if (task.id) spTaskMap.set(task.id, task);
   });
 
-  // Read existing file
-  const existingContent = await readTasksFile(config.filePath);
-
   if (existingContent) {
     // In-place merge: update task lines, leave everything else untouched
-    const finalContent = mergeSpIntoExistingFile(existingContent, spTaskMap, orderedTasks);
+    const finalContent = mergeSpIntoExistingFile(existingContent, spTaskMap, orderedTasks, keepIds);
     await writeTasksFile(config.filePath, finalContent);
   } else {
     // File doesn't exist yet: generate from scratch
@@ -335,6 +341,8 @@ export const mergeSpIntoExistingFile = (
   existingContent: string,
   spTaskMap: Map<string, Task>,
   orderedTasks: Task[],
+  // Task IDs whose lines are kept exactly as they are (ignored tasks, see ignore-tag.ts).
+  keepIds: Set<string> = new Set(),
 ): string => {
   const lines = existingContent.split('\n');
   const outputLines: string[] = [];
@@ -385,6 +393,14 @@ export const mergeSpIntoExistingFile = (
         taskStack.pop();
       }
       const fileParentId = taskStack.length ? taskStack[taskStack.length - 1].id : null;
+
+      // Kept as it is: an ignored task is neither updated nor removed.
+      if (taskId && keepIds.has(taskId)) {
+        seenTaskIds.add(taskId);
+        outputLines.push(line);
+        taskStack.push({ indent: indentLen, id: taskId });
+        continue;
+      }
 
       // The id we resolve for this line (used to track it in the indent stack so
       // its children can find it as their parent).
