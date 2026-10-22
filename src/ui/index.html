@@ -103,6 +103,11 @@
             </div>
             <span class="file-hint">Absolute path to your Obsidian vault.</span>
           </div>
+          <div class="form-group">
+            <label for="inboxFile">Inbox file (tasks in the Inbox without a project)</label>
+            <input type="text" id="inboxFile" placeholder="Inbox/Unsorted.md" />
+            <span class="file-hint">Path inside the vault, relative to it. Empty turns the Inbox sync off.</span>
+          </div>
           <div class="actions">
             <button type="submit" class="btn btn-primary" id="vaultSaveBtn">Save Vault</button>
           </div>
@@ -311,6 +316,7 @@
             loadDailyForm(data.daily || {});
             loadProjectsForm(data.projectsDir || {});
             document.getElementById('vaultPath').value = data.vaultPath || (data.daily && data.daily.vaultPath) || '';
+        document.getElementById('inboxFile').value = data.inboxFile || '';
           }
 
 
@@ -657,9 +663,14 @@
       document.getElementById('vaultForm').addEventListener('submit', async (e) => {
         e.preventDefault();
         try {
-          const res = await sendMessage({ type: 'saveVaultPath', path: document.getElementById('vaultPath').value });
+          const res = await sendMessage({
+            type: 'saveVaultPath',
+            path: document.getElementById('vaultPath').value,
+            inboxFile: document.getElementById('inboxFile').value.trim(),
+          });
           if (!res || !res.success) throw new Error((res && res.error) || 'no response from background');
           document.getElementById('vaultPath').value = res.path;
+          document.getElementById('inboxFile').value = res.inboxFile || '';
           showStatus('Vault path saved', 'success');
         } catch (err) {
           showStatus('Error saving vault path: ' + (err.message || err), 'error');

@@ -37,6 +37,9 @@ export interface LocalUserCfgV2 {
   _latestUrl?: string;
   // Vault path shared by daily notes and project folders (absolute).
   vaultPath?: string;
+  // Vault-relative .md file that holds the tasks of the SP Inbox (no project). Optional;
+  // absent or empty means the Inbox is not synced to a file.
+  inboxFile?: string;
   // Daily-note settings. Optional so existing configs stay valid; absent means
   // the defaults in daily/daily-note.ts (feature OFF, dry-run ON).
   daily?: Partial<DailyNoteCfg>;

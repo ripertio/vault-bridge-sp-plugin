@@ -31,6 +31,7 @@ import { effectiveVaultPath, validateVaultPath } from './vault';
 import { folderListChanged } from './projects/folder-poll';
 import { buildLinkTable, ignoreRow, unignoreRow } from './projects/link-table';
 import { validFolderName, validBindFile } from './projects/project-dir';
+import { INBOX_PROJECT_ID } from './daily/daily-plan';
 import { lazySetInterval } from './helper/lazy-set-interval';
 import { setIgnoreTagEnabled } from './sync/ignore-tag';
 import { spToMd } from './sync/sp-to-md';
@@ -408,6 +409,25 @@ const askAboutDeletedFolder = (deleted: DeletedFolder, title: string, writeMode:
   });
 };
 
+// The Inbox file: tasks in the SP Inbox (no project) are synced with the .md file set in
+// the vault section. Off when no file is set. Its real path is checked before it runs.
+const inboxBindings = async (vaultPath: string): Promise<SyncBindingCfg[]> => {
+  const rel = (currentConfig.inboxFile ?? '').trim();
+  if (!rel || !vaultPath) return [];
+  if (!validBindFile(rel)) {
+    log.error(`Inbox file must be a .md file inside the vault: ${rel}`);
+    return [];
+  }
+  const abs = `${vaultPath.replace(/[\\/]+$/, '')}/${rel}`;
+  try {
+    await assertRealPathInside(vaultPath, abs);
+  } catch (err) {
+    log.error('Inbox file not synced:', err);
+    return [];
+  }
+  return [{ id: 'inbox-file', filePath: abs, projectId: INBOX_PROJECT_ID, enabled: true, projectTitle: 'Inbox' }];
+};
+
 // Bindings that should run now: the manual list, or the folder-derived list when
 // auto mode is on. A failed folder scan starts nothing (see effective-bindings.ts).
 const startBindings = async (): Promise<void> => {
@@ -526,9 +546,10 @@ const startBindings = async (): Promise<void> => {
         (await PluginAPI.getAllProjects()).map((p) => ({ id: p.id, title: p.title })),
     },
   );
+  const inbox = await inboxBindings(vaultPath);
   if (!result.ok) {
     log.error(`auto project sync not started: ${result.error}`);
-    initSyncRegistry([], currentConfig._lastSynced ?? {});
+    initSyncRegistry(inbox, currentConfig._lastSynced ?? {});
     return;
   }
   // activeBindingsJson tracks the MANUAL list (what the panel edits), not the
@@ -537,7 +558,7 @@ const startBindings = async (): Promise<void> => {
     log.log(`auto project sync: ${result.bindings.length} folder(s) matched`);
     result.bindings.forEach((b) => log.log(`  ↔ ${b.projectTitle} (${b.filePath})`));
   }
-  initSyncRegistry(result.bindings, currentConfig._lastSynced ?? {});
+  initSyncRegistry([...result.bindings, ...inbox], currentConfig._lastSynced ?? {});
 };
 
 // projectListUpdate can fire several times in a row (e.g. while SP is busy). One
@@ -961,10 +982,19 @@ const dailyDeps = () => ({
       if (type === 'saveVaultPath') {
         const result = validateVaultPath(message.path);
         if (!result.ok) return { success: false, error: result.error };
-        currentConfig = { ...currentConfig, vaultPath: result.path };
+        // The Inbox file is optional and saved with the vault. Empty turns it off.
+        let inboxFile = currentConfig.inboxFile;
+        if (message.inboxFile !== undefined) {
+          const rel = String(message.inboxFile ?? '').trim();
+          if (rel && !validBindFile(rel)) return { success: false, error: 'Inbox file must be a .md file inside the vault.' };
+          inboxFile = rel || undefined;
+        }
+        const inboxChanged = inboxFile !== currentConfig.inboxFile || result.path !== currentConfig.vaultPath;
+        currentConfig = { ...currentConfig, vaultPath: result.path, inboxFile };
         persistConfig();
         startFolderPoll();
-        return { success: true, path: result.path };
+        if (inboxChanged) void startBindings();
+        return { success: true, path: result.path, inboxFile: inboxFile ?? '' };
       }
       if (type === 'saveDailySettings') {
         const result = validateDailySettings(message.daily ?? {});
