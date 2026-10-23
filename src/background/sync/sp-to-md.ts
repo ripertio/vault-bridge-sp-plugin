@@ -133,8 +133,9 @@ export const spToMd = async (config: SyncBindingCfg, group?: SpToMdGroup): Promi
         : []
       : orderedTasks;
     const markdown = convertTasksToMarkdown(forThisFile);
-    // Leave a missing or empty extra file as it is.
-    if (!group || markdown !== '' || existingContent !== null) await writeTasksFile(config.filePath, markdown);
+    // Leave a missing or empty extra file as it is. The main file is always created, even
+    // with no tasks: a binding whose file never appears reads as a deleted file.
+    if (!group || group.appendNew || markdown !== '' || existingContent !== null) await writeTasksFile(config.filePath, markdown);
   }
 };
 
