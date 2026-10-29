@@ -393,4 +393,41 @@ describe('generateTaskOperations', () => {
       }
     });
   });
+
+  describe('reorder of root tasks', () => {
+    const md = (id: string, line: number): ParsedTask => ({
+      line,
+      indent: 0,
+      completed: false,
+      id,
+      title: id,
+      originalLine: `- [ ] <!--${id}--> ${id}`,
+      parentId: null,
+      isSubtask: false,
+      depth: 0,
+    });
+    const sp = ['a', 'b', 'c'].map((id) => mkTask({ id, title: id }));
+    const mdTasks = [md('a', 0), md('b', 1), md('c', 2)];
+    const hasReorder = (ops: { type: string }[]) => ops.some((op) => op.type === 'reorder');
+
+    it('is left out when the project already has that order', () => {
+      expect(hasReorder(generateTaskOperations(mdTasks, sp, 'test-project', ['a', 'b', 'c']))).toBe(false);
+    });
+
+    it('ignores project tasks that are not in the file when comparing', () => {
+      expect(hasReorder(generateTaskOperations(mdTasks, sp, 'test-project', ['a', 'z', 'b', 'c']))).toBe(false);
+    });
+
+    it('is kept when the order differs', () => {
+      expect(hasReorder(generateTaskOperations(mdTasks, sp, 'test-project', ['b', 'a', 'c']))).toBe(true);
+    });
+
+    it('is kept when a task of the file is not in the project order (backlog)', () => {
+      expect(hasReorder(generateTaskOperations(mdTasks, sp, 'test-project', ['a', 'b']))).toBe(true);
+    });
+
+    it('is kept when the order is not given', () => {
+      expect(hasReorder(generateTaskOperations(mdTasks, sp, 'test-project'))).toBe(true);
+    });
+  });
 });

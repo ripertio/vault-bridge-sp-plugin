@@ -82,10 +82,26 @@ const validateOperations = (
 /**
  * Generate batch operations to sync markdown tasks to Super Productivity
  */
+/**
+ * True when the file's root order already matches the project's. Only decided when every
+ * task of the file is in `currentOrder` (a new task has a temp id, a backlog task is in
+ * another list); in any other case the reorder is kept.
+ */
+const isRootOrderUnchanged = (fileOrder: string[], currentOrder?: string[]): boolean => {
+  if (!currentOrder) return false;
+  const inFile = new Set(fileOrder);
+  const current = currentOrder.filter((id) => inFile.has(id));
+  return current.length === fileOrder.length && current.every((id, i) => id === fileOrder[i]);
+};
+
 export const generateTaskOperations = (
   mdTasks: ParsedTask[],
   spTasks: Task[],
   projectId: string,
+  // The project's current root task order (`Project.taskIds`). When given, a reorder that
+  // would change nothing is left out: every batch is an operation SP stores and uploads,
+  // so an unneeded one makes this device's copy look newer than the other devices'.
+  currentRootOrder?: string[],
 ): BatchOperation[] => {
   const operations: BatchOperation[] = [];
 
@@ -425,7 +441,7 @@ export const generateTaskOperations = (
     })
     .filter((taskId) => !tasksToDelete.includes(taskId)); // Filter out tasks that are being deleted
 
-  if (mdTaskIds.length > 0) {
+  if (mdTaskIds.length > 0 && !isRootOrderUnchanged(mdTaskIds, currentRootOrder)) {
     operations.push({
       type: 'reorder',
       taskIds: mdTaskIds,

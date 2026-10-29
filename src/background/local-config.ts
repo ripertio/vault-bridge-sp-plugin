@@ -39,6 +39,10 @@ export interface LocalUserCfgV2 {
   //    on open without re-hitting the network.
   _cachedProjects?: { id: string; title: string }[];
   _lastSynced?: Record<string, string>;
+  //  - _fileHashes: content fingerprint of each synced file (by path) as of the last sync.
+  //    At startup a file that still has this fingerprint has no edit of its own, so SP's
+  //    state (just updated by its own Dropbox / SuperSync sync) wins instead of the file.
+  _fileHashes?: Record<string, string>;
   _lastUpdateCheck?: string;
   _latestVersion?: string;
   _latestUrl?: string;

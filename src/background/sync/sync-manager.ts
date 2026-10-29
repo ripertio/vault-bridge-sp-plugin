@@ -71,6 +71,8 @@ export interface ConfigBridge {
   repointBinding: (bindingId: string, newProjectId: string) => void;
   /** Persist the last-known SP project title for a binding. */
   updateBindingTitle: (bindingId: string, title: string) => void;
+  /** Persist the content fingerprints (by file path) recorded at a successful sync. */
+  reportFileHashes?: (hashes: Record<string, string>) => void;
 }
 
 let configBridge: ConfigBridge | null = null;
@@ -79,6 +81,10 @@ export const setConfigBridge = (bridge: ConfigBridge): void => {
 };
 
 const sessions = new Map<string, SyncSession>();
+
+// Content fingerprint of each synced file (by path) as of its last sync, persisted across
+// restarts. Seeded by initSyncRegistry and kept current by markSynced.
+let storedHashes: Record<string, string> = {};
 
 // Binding ids that currently have a missing-resource dialog open. Keyed by
 // binding id (NOT session object) so the guard survives registry restarts: if a
@@ -236,10 +242,48 @@ const verifyFile = async (session: SyncSession): Promise<SyncVerificationResult>
   return verifySyncState(session.config, orderedContents(session, own, siblings));
 };
 
+/**
+ * True when no file of the binding (all files of a multi-file project) has changed since
+ * its last sync. SP's state is then the newer one: SP has just run its own sync, and an
+ * import of these files would only put the vault's older copy back on top of it. With no
+ * recorded fingerprint (first start after an update, never synced) this is false.
+ */
+const filesUnchangedSinceLastSync = async (session: SyncSession): Promise<boolean> => {
+  if (session.config.filesRemoved) return false;
+  const paths = session.config.groupPaths ?? [session.config.filePath];
+  for (const path of paths) {
+    const content = await readTasksFile(path);
+    if (content === null || fileHasUnsyncedEdit(hashContent(content), storedHashes[path] ?? null)) {
+      return false;
+    }
+  }
+  return true;
+};
+
+/** SP → every file of the binding. Extra files first, as after an import (see importFile). */
+const writeBackAll = async (session: SyncSession): Promise<void> => {
+  const paths = session.config.groupPaths;
+  if (!paths) return writeBack(session);
+  for (const path of [...paths.slice(1), paths[0]]) await writeBackFile(session, path);
+};
+
 /** Mark a session as having synced now, and report it to the config owner. */
 const markSynced = async (session: SyncSession): Promise<void> => {
   session.hasSyncedBefore = true;
   configBridge?.reportSynced(session.config.id, new Date().toISOString());
+  // Persist a fingerprint of every file of the binding. A sibling is written by this
+  // session's import too, so its own session may not have recorded it yet.
+  try {
+    const hashes: Record<string, string> = {};
+    for (const path of session.config.groupPaths ?? [session.config.filePath]) {
+      const content = await readTasksFile(path);
+      if (content !== null) hashes[path] = hashContent(content);
+    }
+    storedHashes = { ...storedHashes, ...hashes };
+    configBridge?.reportFileHashes?.(hashes);
+  } catch {
+    // The next sync records them; until then a startup imports the file, as before.
+  }
   // Record a fingerprint of the file's current content as the "last synced"
   // baseline. A later Markdown edit changes the content hash regardless of what
   // it does to the mtime, so syncAllNow imports it before writing SP→MD and
@@ -286,9 +330,11 @@ export const dedupeBindingsByCanonicalPath = (
 export const initSyncRegistry = (
   bindings: SyncBindingCfg[],
   lastSynced: Record<string, string> = {},
+  fileHashes: Record<string, string> = {},
 ): void => {
   // Dispose existing sessions
   disposeAllSessions();
+  storedHashes = { ...fileHashes };
 
   // Setup window focus tracking once
   setupWindowFocusTracking();
@@ -348,7 +394,7 @@ const createSyncSession = (
     lastMdToSpSyncTimestamp: -SP_HOOK_COOLDOWN_MS,
     pendingMdToSpSync: false,
     hasSyncedBefore,
-    lastSyncedContentHash: null,
+    lastSyncedContentHash: storedHashes[config.filePath] ?? null,
   };
 
   sessions.set(config.id, session);
@@ -722,7 +768,16 @@ const performInitialSyncUnlocked = async (session: SyncSession): Promise<void> =
         const siblings = await readSiblings(session);
         hasTasks = !!siblings && [...siblings.values()].some((c) => CHECKBOX.test(c));
       }
-      if (hasTasks) {
+      if (hasTasks && (await filesUnchangedSinceLastSync(session))) {
+        // No file changed since the last sync, so SP is the newer side (SP syncs with
+        // Dropbox / SuperSync before plugins start). Importing the vault's older copy
+        // would revert tasks that were changed on another device, and SP would upload
+        // that revert as the latest change. Write SP's state to the files instead.
+        log.log(`[vault-bridge] ${session.config.id}: files unchanged since last sync — SP state wins, no import`);
+        await writeBackAll(session);
+        const verificationResult = await verifyFile(session);
+        logSyncVerification(verificationResult, `initial sync [${session.config.id}]`);
+      } else if (hasTasks) {
         // File has tasks — file is the source of truth. Import into SP, then
         // always write back so task IDs are stamped into the Markdown file.
         const result = await importFile(session, content ?? '');
@@ -1263,6 +1318,7 @@ export const shutdownSyncRegistry = (): void => {
   recreatingBindings.clear();
   lastPromptAt.clear();
   projectQueues.clear();
+  storedHashes = {};
 };
 
 export const _resetForTesting = (): void => {

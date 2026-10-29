@@ -80,7 +80,8 @@ export const mdToSp = async (
     const currentTasks = await PluginAPI.getTasks();
     const currentProjects = await PluginAPI.getAllProjects();
 
-    if (!currentProjects.find((p) => p.id === projectId)) {
+    const project = currentProjects.find((p) => p.id === projectId);
+    if (!project) {
       throw new Error(`Project ${projectId} not found`);
     }
 
@@ -105,7 +106,7 @@ export const mdToSp = async (
           spTasks: ignoreFiltered.spTasks.filter((t) => !t.isDone || uncheckedIds.has(t.id as string)),
         }
       : ignoreFiltered;
-    const operations = generateTaskOperations(sync.parsed, sync.spTasks, projectId);
+    const operations = generateTaskOperations(sync.parsed, sync.spTasks, projectId, project.taskIds);
 
     // Execute in two ordered phases so a deleted parent never cascades onto a
     // promoted child. SP's batch reducer resolves a `delete` against the

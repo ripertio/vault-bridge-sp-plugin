@@ -102,6 +102,7 @@ describe('MD to SP Sync - Complete Tests', () => {
         mockParsedTasks,
         [],
         mockProjectId,
+        undefined, // the mocked project has no taskIds
       );
       expect(mockPluginAPI.batchUpdateForProject).toHaveBeenCalledWith({
         projectId: mockProjectId,
@@ -182,6 +183,7 @@ describe('MD to SP Sync - Complete Tests', () => {
         mockParsedTasks,
         existingTasks,
         mockProjectId,
+        undefined, // the mocked project has no taskIds
       );
     });
 
@@ -359,6 +361,7 @@ describe('MD to SP Sync - Complete Tests', () => {
         specialTasks,
         [],
         mockProjectId,
+        undefined, // the mocked project has no taskIds
       );
     });
 
@@ -396,7 +399,7 @@ describe('MD to SP Sync - Complete Tests', () => {
 
       await mdToSp(mockMarkdownContent, mockProjectId);
 
-      expect(generateTaskOperations).toHaveBeenCalledWith(nestedTasks, [], mockProjectId);
+      expect(generateTaskOperations).toHaveBeenCalledWith(nestedTasks, [], mockProjectId, undefined);
     });
 
     it('should skip sync when no operations are needed', async () => {

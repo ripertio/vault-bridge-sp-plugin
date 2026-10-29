@@ -551,7 +551,7 @@ const runStartBindings = async (): Promise<void> => {
   const inbox = await inboxBindings(vaultPath);
   if (!result.ok) {
     log.error(`auto project sync not started: ${result.error}`);
-    initSyncRegistry(inbox, currentConfig._lastSynced ?? {});
+    initSyncRegistry(inbox, currentConfig._lastSynced ?? {}, currentConfig._fileHashes ?? {});
     return;
   }
   // activeBindingsJson tracks the MANUAL list (what the panel edits), not the
@@ -578,7 +578,7 @@ const runStartBindings = async (): Promise<void> => {
     currentConfig._lastSynced = next;
     persistConfigSoon();
   }
-  initSyncRegistry([...bindings, ...inbox], lastSynced);
+  initSyncRegistry([...bindings, ...inbox], lastSynced, currentConfig._fileHashes ?? {});
 };
 
 const bindingsQueue = createSerialQueue();
@@ -765,6 +765,10 @@ const dailyDeps = () => ({
   setConfigBridge({
     reportSynced: (bindingId, isoTime) => {
       currentConfig._lastSynced = { ...(currentConfig._lastSynced ?? {}), [bindingId]: isoTime };
+      persistConfigSoon();
+    },
+    reportFileHashes: (hashes) => {
+      currentConfig._fileHashes = { ...(currentConfig._fileHashes ?? {}), ...hashes };
       persistConfigSoon();
     },
     deleteBinding: (bindingId) => {

@@ -37,6 +37,8 @@ One *binding* ties an SP project to one `.md` file. With the multi-file option a
 - `missing-resource.ts` handles a vanished file or project through SP dialogs.
 - `inbox-done.ts` implements the opt-in "remove checked tasks from the Inbox file" setting.
 
+**Startup direction.** SP syncs with Dropbox or SuperSync before it starts plugins, so at startup SP holds the newer state. If no file of a binding has changed since its last sync (content fingerprint saved per path in `_fileHashes`), nothing is imported and SP is written to the files. A file with an edit, or with no saved fingerprint (first start after an update), is imported as before. Without this rule an older vault copy would be put back over SP, and SP would upload that as the latest change. `generateTaskOperations` also leaves out a `reorder` that would not change the project's order, so an import with no real change makes no SP operation.
+
 Loop prevention: after a file → SP import, SP hooks are suppressed for `SP_HOOK_COOLDOWN_MS` (2 s, `config.const.ts`), and writes are skipped when the content fingerprint is unchanged.
 
 ### 2. Projects folder (`projects/`)
@@ -92,6 +94,7 @@ Config lives in `localStorage` under `vault-bridge-config`. A config saved under
 | `_dailyBaseline`, `_dailyBaselineDay` | daily-note baseline, see above |
 | `_dailyRolloverDay` | last day whose overdue tasks were rolled over |
 | `_lastSynced` | last successful sync per binding, which also tells a new binding from one whose file vanished |
+| `_fileHashes` | content fingerprint per synced file path at its last sync, used to pick the startup direction |
 | `_cachedProjects` | project list for the sandboxed panel |
 
 The panel owns only `version` and `bindings`. `mergeUiConfig` keeps every other field when the panel saves.
