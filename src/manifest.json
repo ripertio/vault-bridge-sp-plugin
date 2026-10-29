@@ -2,7 +2,7 @@
   "id": "vault-bridge",
   "manifestVersion": 1,
   "name": "Vault Bridge",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Two-way bridge between Super Productivity and an Obsidian vault: project folders, daily notes and the Inbox",
   "author": "ripertio",
   "homepage": "https://github.com/ripertio/vault-bridge-sp-plugin",

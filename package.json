@@ -1,6 +1,6 @@
 {
   "name": "vault-bridge",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Two-way bridge between Super Productivity and an Obsidian vault: project folders, daily notes and the Inbox",
   "author": "ripertio",
   "license": "MIT",
