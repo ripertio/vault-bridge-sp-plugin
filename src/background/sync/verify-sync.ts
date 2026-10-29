@@ -2,6 +2,7 @@ import type { Task } from '@super-productivity/plugin-api';
 import { readTasksFile } from '../helper/file-utils';
 import { parseMarkdown, parseMarkdownGroup } from './markdown-parser';
 import { SyncBindingCfg } from '../local-config';
+import { removesDone } from './inbox-done';
 
 export interface SyncVerificationResult {
   isInSync: boolean;
@@ -51,15 +52,18 @@ export const verifySyncState = async (
     const spTaskMap = new Map<string, Task>();
     const mdTaskMap = new Map<string, (typeof mdTasks)[0]>();
 
-    spTasks.forEach((task) => {
-      if (task.id) {
-        spTaskMap.set(task.id, task);
-      }
-    });
-
     mdTasks.forEach((task) => {
       if (task.id) {
         mdTaskMap.set(task.id, task);
+      }
+    });
+
+    // The Inbox file leaves out done tasks (inbox-done.ts), so one without a line is no
+    // difference. A done task whose line is still in the file is compared as usual.
+    const dropDone = removesDone(config.projectId);
+    spTasks.forEach((task) => {
+      if (task.id && !(dropDone && task.isDone && !mdTaskMap.has(task.id))) {
+        spTaskMap.set(task.id, task);
       }
     });
 

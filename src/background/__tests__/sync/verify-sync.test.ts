@@ -2,6 +2,8 @@ import { verifySyncState, logSyncVerification } from '../../sync/verify-sync';
 import { SyncBindingCfg } from '../../local-config';
 import * as fileUtils from '../../helper/file-utils';
 import { Task } from '@super-productivity/plugin-api';
+import { setInboxRemoveDone } from '../../sync/inbox-done';
+import { INBOX_PROJECT_ID } from '../../daily/daily-plan';
 
 // Mock dependencies
 jest.mock('../../helper/file-utils');
@@ -427,5 +429,50 @@ describe('logSyncVerification', () => {
       sp: 'Title SP',
       md: 'Title MD',
     });
+  });
+});
+
+describe('verifySyncState on the Inbox with "remove checked tasks" on', () => {
+  const inboxConfig: SyncBindingCfg = {
+    id: 'inbox',
+    filePath: '/test/inbox.md',
+    projectId: INBOX_PROJECT_ID,
+    enabled: true,
+  };
+  const task = (id: string, isDone: boolean) =>
+    ({ id, title: id, isDone, projectId: INBOX_PROJECT_ID, parentId: null }) as Task;
+
+  const run = async (tasks: Task[], md: string, taskIds: string[]) => {
+    ((global as any).PluginAPI.getTasks as jest.Mock).mockResolvedValue(tasks);
+    ((global as any).PluginAPI.getAllProjects as jest.Mock).mockResolvedValue([
+      { id: INBOX_PROJECT_ID, taskIds },
+    ]);
+    (fileUtils.readTasksFile as jest.Mock).mockResolvedValue(md);
+    return verifySyncState(inboxConfig);
+  };
+
+  afterEach(() => setInboxRemoveDone(false));
+
+  it('a done task without a line is no difference', async () => {
+    setInboxRemoveDone(true);
+    const result = await run([task('a', false), task('b', true)], '- [ ] <!--a--> a', ['a', 'b']);
+    expect(result.isInSync).toBe(true);
+  });
+
+  it('an open task without a line is still reported', async () => {
+    setInboxRemoveDone(true);
+    const result = await run([task('a', false), task('b', false)], '- [ ] <!--a--> a', ['a', 'b']);
+    expect(result.differences.map((d) => d.type)).toContain('missing-in-md');
+  });
+
+  it('a done task is still reported while the setting is off', async () => {
+    const result = await run([task('a', false), task('b', true)], '- [ ] <!--a--> a', ['a', 'b']);
+    expect(result.isInSync).toBe(false);
+  });
+
+  it('a done task whose line is still in the file is compared as usual', async () => {
+    setInboxRemoveDone(true);
+    const result = await run([task('a', true)], '- [x] <!--a--> a', ['a']);
+    expect(result.isInSync).toBe(true);
   });
 });
