@@ -86,6 +86,15 @@ export const plannedTaskIdsForToday = (tags: { id: string; taskIds: string[] }[]
 };
 
 /**
+ * True when the task was completed on a day before `today` (YYYY-MM-DD). A task that is
+ * not done, or has no completion time (e.g. after an import), is never "completed before".
+ */
+export const completedBefore = (
+  task: { isDone: boolean; doneOn?: number | null },
+  today: string,
+): boolean => task.isDone && !!task.doneOn && isoDay(new Date(task.doneOn)) < today;
+
+/**
  * Heading line from user input: trimmed, and given `## ` when it has no `#` prefix.
  * Empty input falls back to the default.
  */

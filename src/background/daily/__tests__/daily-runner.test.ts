@@ -76,6 +76,22 @@ describe('runDailyNoteDryRun', () => {
     );
   });
 
+  it('skips unarchived tasks completed on an earlier day, keeps those done today or without doneOn', async () => {
+    (global as any).PluginAPI = {
+      getAllTags: jest.fn().mockResolvedValue([{ id: 'TODAY', taskIds: ['old', 'new', 'nodate'] }]),
+      getTasks: jest.fn().mockResolvedValue([
+        { id: 'old', title: 'Done yesterday', isDone: true, doneOn: new Date(2026, 9, 20, 18).getTime() },
+        { id: 'new', title: 'Done today', isDone: true, doneOn: new Date(2026, 9, 21, 8).getTime() },
+        { id: 'nodate', title: 'Imported', isDone: true, doneOn: null },
+      ]),
+    };
+    await runDailyNoteDryRun({ ...cfg, dryRun: false }, deps, NOW);
+    expect(mockedWrite).toHaveBeenCalledWith(
+      '/vault/Daily/2026-10-21.md',
+      '## To Dos\n- [x] <!--new--> Done today\n- [x] <!--nodate--> Imported\n',
+    );
+  });
+
   it('writes an empty existing note without a leading blank line', async () => {
     mockedRead.mockResolvedValue('');
     setSp(['p1']);

@@ -1,5 +1,6 @@
 import {
   DEFAULT_DAILY_NOTE_CFG,
+  completedBefore,
   dailyNoteRelativePath,
   ensureToDosSection,
   findToDosSection,
@@ -149,5 +150,24 @@ describe('resolveDailyNoteCfg vault migration', () => {
   it('prefers vaultPath when both exist', () => {
     const cfg = resolveDailyNoteCfg({ vaultPath: '/new', vaultRoot: '/legacy' } as any);
     expect(cfg.vaultPath).toBe('/new');
+  });
+});
+
+describe('completedBefore', () => {
+  const yesterday = new Date(2026, 9, 20, 23, 59).getTime();
+  const today = new Date(2026, 9, 21, 0, 1).getTime();
+
+  it('is true for a task done on an earlier day', () => {
+    expect(completedBefore({ isDone: true, doneOn: yesterday }, '2026-10-21')).toBe(true);
+  });
+
+  it('is false for a task done today', () => {
+    expect(completedBefore({ isDone: true, doneOn: today }, '2026-10-21')).toBe(false);
+  });
+
+  it('is false when not done or when doneOn is unknown', () => {
+    expect(completedBefore({ isDone: false, doneOn: yesterday }, '2026-10-21')).toBe(false);
+    expect(completedBefore({ isDone: true, doneOn: null }, '2026-10-21')).toBe(false);
+    expect(completedBefore({ isDone: true }, '2026-10-21')).toBe(false);
   });
 });

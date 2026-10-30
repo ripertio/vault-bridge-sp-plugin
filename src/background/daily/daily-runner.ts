@@ -12,7 +12,7 @@ import { planDailyNote, DailyPlanTask, INBOX_PROJECT_ID } from './daily-plan';
 import { DailyBaseline, diffNoteAgainstBaseline, findRemovedBaselineIds, parseNoteTaskLine } from './daily-reverse';
 import { applyBatch } from '../sync/md-to-sp';
 import { findNewTaskLines, stampCreatedLines, stampNewTaskLine } from './daily-create';
-import { findToDosSection } from './daily-note';
+import { completedBefore, findToDosSection } from './daily-note';
 import { findOverdueIds, insertIntoSection, readPreviousNote } from './daily-rollover';
 import { createSerialQueue } from '../helper/serial-queue';
 
@@ -133,7 +133,8 @@ const runDailyNote = async (cfg: DailyNoteCfg, deps: DailyRunDeps, now: Date): P
   // Deleted tasks must not be planned, or the forward pass writes their lines back.
   const tasks = updatedTasks.filter((t) => !deletedIds.has(t.id));
   const planned: DailyPlanTask[] = tasks
-    .filter((t) => plannedIds.has(t.id) && !unscheduledIds.has(t.id))
+    // Done on an earlier day but not archived yet: still in Today, but belongs to that day's note.
+    .filter((t) => plannedIds.has(t.id) && !unscheduledIds.has(t.id) && !completedBefore(t, today))
     .map((t) => ({ id: t.id, title: t.title, isDone: t.isDone, projectId: t.projectId }));
 
   // 1b) Create: task lines the user typed (no ID) become SP tasks in the Inbox.
